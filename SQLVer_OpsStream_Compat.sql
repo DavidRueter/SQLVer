@@ -22,6 +22,7 @@ VALUES
   ('opsstream', 'sputilSendMail_CLR'),
   ('dbo', 'Find')
 
+ 
 DECLARE @DropSchema sysname
 DECLARE @DropObject sysname
 DECLARE @SQL nvarchar(MAX)
@@ -54,9 +55,12 @@ END
 CLOSE curThis
 DEALLOCATE curThis
   
+
+
 EXEC sqlver.spsysBuildCLRAssemblyCache
 EXEC sqlver.spsysBuildCLR_GetHTTP   
 EXEC sqlver.spsysBuildCLR_SendMail
+
 
 DECLARE @OldSchemaName sysname
 DECLARE @OldObjectName sysname
@@ -71,6 +75,7 @@ CREATE TABLE #ToReplace (
   NewObjectName sysname NULL
 )
 
+
 INSERT INTO #ToReplace (NewObjectName, OldObjectName)
 VALUES
   ('spsysBackupFull', 'spsysBackupWeekly'),
@@ -81,6 +86,7 @@ VALUES
   ('udfParseValueReplace', 'parseValueReplace'),
   ('spinsSysRTLog', 'spinsSysRTMessage')
     
+
 INSERT INTO #ToReplace (NewObjectName)
 VALUES
   ('sputilGetHTTP_CLR'),
@@ -132,14 +138,17 @@ VALUES
   ('udfMath_deg2rad'),    
   ('udfMath_rad2deg'),
   ('udfDistanceFromCoordinates'),
-  ('sputilGetHTTP')  
+  ('sputilGetHTTP')
+  
+  
   
 UPDATE #ToReplace
 SET
   OldSchemaName = ISNULL(OldSchemaName, 'opsstream'),
   OldObjectName = ISNULL(OldObjectName, NewObjectName),
-  NewObjectName = ISNULL(NewObjectName, 'sqlver')
+  NewSchemaName = ISNULL(NewSchemaName, 'sqlver')
   
+
 DECLARE curThis CURSOR STATIC LOCAL FOR
 SELECT
   tmp.OldSchemaName,
@@ -159,13 +168,14 @@ FETCH curThis INTO
   @NewObjectName
   
 WHILE @@FETCH_STATUS = 0 BEGIN
+  
   SET @SQL =
     'IF EXISTS (SELECT * FROM sys.synonyms syn JOIN sys.schemas sch ON syn.schema_id = sch.schema_id WHERE sch.name = ''' + @OldSchemaName + ''' AND syn.name = ''' + @OldObjectName + ''') DROP SYNONYM ' + @OldSchemaName + '.' + @OldObjectName + 
     ' ELSE IF OBJECT_ID(''' + @OldSchemaName + '.' + @OldObjectName + ''') IS NOT NULL DROP ' + 
     CASE
-      WHEN @NewObjectName LIKE 'sp' THEN 'PROCEDURE'
-      WHEN @NewObjectName LIKE 'udf' THEN 'FUNCTION'
-    END + ' ' + @OldSchemaName + '.' + @OldSchemaName + 
+      WHEN @NewObjectName LIKE 'sp%' THEN 'PROCEDURE'
+      WHEN @NewObjectName LIKE 'udf%' THEN 'FUNCTION'
+    END + ' ' + @OldSchemaName + '.' + @OldObjectName + CHAR(10) +
     'CREATE SYNONYM ' + @OldSchemaName + '.' + @OldObjectName + ' FOR ' +  @NewSchemaName + '.' + @NewObjectName
     
   PRINT @SQL
@@ -182,7 +192,10 @@ END
 CLOSE curThis
 DEALLOCATE curThis    
 
+
 CREATE SYNONYM dbo.find FOR sqlver.sputilFindInCode
+
 
 DROP TABLE #ToDrop
 DROP TABLE #ToReplace
+
