@@ -6,6 +6,13 @@ This script makes changes to an OpsStream database to allow it to use SQLVer obj
 This script is not needed for a general SQLVer installation.  It is needed only if installing SQLVer into an OpsStream database.
 */
 
+
+CREATE SYNONYM sqlver.vwMasterSchemaLog FOR [MASTER.OPSSTREAM.COM,24849].osMaster.sqlver.vwSchemaLog
+CREATE SYNONYM sqlver.vwMasterSchemaManifest FOR [MASTER.OPSSTREAM.COM,24849].osMaster.sqlver.vwSchemaManifest
+CREATE SYNONYM sqlver.spMasterExecuteSQL FOR [MASTER.OPSSTREAM.COM,24849].osMaster.dbo.sp_executesql
+CREATE SYNONYM sqlver.spMasterSchemaObjectDefinition FOR [MASTER.OPSSTREAM.COM,24849].osMaster.sqlver.spsysSchemaObjectDefinition
+
+
 CREATE TABLE #ToDrop (
   Seq int IDENTITY,
   DropSchema sysname NULL,
