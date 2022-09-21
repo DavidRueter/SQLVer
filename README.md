@@ -14,7 +14,7 @@ Original article about SQLVer published on SQL Sever Central on 1/22/2015.  Orig
 See:  http://www.sqlservercentral.com/articles/Version+Control+Systems+(VCS)/119029/
 
 
-#Installation Notes
+# Installation Notes
 
 SQLVer uses two Microsoft tools:  the command-line  compiler csc.exe and the strong-name tool sn.exe
 
