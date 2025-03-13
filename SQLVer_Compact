@@ -1,0 +1,5308 @@
+--SQLVerEssential generated on Mar 13 2025  3:29PM
+
+/*
+SQLVer
+©Copyright 2006-2025 by David Rueter (drueter@assyst.com)
+See:  https://github.com/davidrueter/sqlver
+
+The MIT License (MIT)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+
+PRINT 'Installing SQLVer'
+GO
+
+
+SET ANSI_NULLS ON
+GO
+
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+IF EXISTS (SELECT * FROM sys.triggers WHERE name = 'dtgSQLVerLogSchemaChanges' AND parent_class = 0) BEGIN
+ DROP TRIGGER [dtgSQLVerLogSchemaChanges] ON DATABASE
+END
+GO
+
+
+IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'sqlver') BEGIN
+DECLARE @SQL nvarchar(MAX)
+SET @SQL = 'CREATE SCHEMA [sqlver] '
+EXEC(@SQL)
+END
+GO
+
+
+IF OBJECT_ID('[sqlver].[tblNumbers]') IS NULL BEGIN
+CREATE TABLE [sqlver].[tblNumbers](
+	[Number] [int] NOT NULL,
+	CONSTRAINT [pkNumbers] PRIMARY KEY CLUSTERED
+(
+  [Number] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+END
+
+      ELSE BEGIN
+      PRINT 'WARNING:  Table [sqlver].[tblNumbers] already exists.'
+      PRINT 'It would be best if you can drop this table and then re-execute this script to re-create it.'
+      PRINT '   DROP TABLE [sqlver].[tblNumbers]'
+      PRINT 'If you do not drop this table, you may need to alter it manually.'
+      PRINT 'New:'
+      PRINT '>>>>'
+      PRINT 'CREATE TABLE [sqlver].[tblNumbers](
+	[Number] [int] NOT NULL,
+	CONSTRAINT [pkNumbers] PRIMARY KEY CLUSTERED
+(
+  [Number] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+) ON [PRIMARY]
+'
+      PRINT '<<<<'
+      PRINT ''
+      PRINT 'Existing: '
+      PRINT '>>>>'
+      PRINT sqlver.udfScriptTable('[sqlver].[tblNumbers]', NULL)
+      PRINT '<<<<'
+      PRINT ''
+      END
+GO
+
+
+IF NOT EXISTS(SELECT TOP 1 Number FROM sqlver.tblNumbers) BEGIN
+INSERT INTO sqlver.tblNumbers (Number)
+SELECT TOP 200000
+ROW_NUMBER() OVER (ORDER BY a.number, b.number)
+FROM
+  master..spt_values a
+ JOIN master..spt_values b ON 1 = 1
+END
+ELSE BEGIN
+PRINT 'WARNING: SQLVer requires that table sqlver.tblNumbers contain unique sequential integers from 1 to 200000.  Fewer rows may cause unexpected results.  More rows may be OK, but may degrade performance of certain functions.'
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[sputilPrintString]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[sputilPrintString]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[sputilPrintString]
+@Buf varchar(MAX),
+@Help bit = 0
+
+WITH EXECUTE AS OWNER
+--$!SQLVer Sep 13 2022 12:46PM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  IF @Help = 1 BEGIN
+
+    DECLARE @CRLF nvarchar(5)
+    SET @CRLF = CHAR(13) + CHAR(10)
+
+    PRINT
+      CONCAT(
+        'WARNING:  You must search-and-replace the string printed here to replace:', @CRLF,
+        '    ~-~{CR}{LF}', @CRLF,
+        'with an empty string.', @CRLF,  @CRLF,
+        'For example, using T-SQL:', @CRLF,  @CRLF,
+        '    REPLACE(@Buf, CHAR(126) + CHAR(45) + CHAR(126) + CHAR(13) + CHAR(10), '''')', @CRLF,  @CRLF,
+        'Or using SSMS, open Find and Replace (i.e. with CTRL-H), click the .* icon (to enable regular expressions), and search for:', @CRLF,  @CRLF,
+        '    \x7e\x2d\x7e\x0d\x0a', @CRLF, @CRLF,
+        '(This is due to a limitation of the T-SQL PRINT statement that does not provide a way to print long strings or to suppress CR LF.)', @CRLF,
+        '********************************************'
+      )
+  END
+
+  DECLARE @S varchar(MAX)
+  DECLARE @P int
+  SET @P = 1
+  
+  WHILE @P < LEN(@Buf + 'x') - 1 BEGIN
+    SET @S = SUBSTRING(@Buf, @P, 4000)
+    PRINT CONCAT(@S, CHAR(126), '-', CHAR(126))  --CHAR(126) is tilde character
+    SET @P = @P + 4000
+  END
+
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[sputilResultSetAsStr]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[sputilResultSetAsStr]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[sputilResultSetAsStr]
+@SQL nvarchar(MAX),
+@ResultPrefix nvarchar(MAX) = '',
+@ResultSuffix nvarchar(MAX) = '',
+@TrimTrailSuffix bit = 1,
+@IncludeLineBreaks bit = 0,
+@Result nvarchar(MAX) OUTPUT
+
+WITH EXECUTE AS OWNER
+--$!SQLVer Nov  7 2020  5:10AM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  SET NOCOUNT ON
+  --note:  statement in @SQL must return only a single column.
+
+  DECLARE @ThisValue nvarchar(MAX)
+  DECLARE @CRLF nvarchar(5)
+  SET @CRLF = NCHAR(13) + NCHAR(10)
+
+  DECLARE @tvValues TABLE (Seq int IDENTITY PRIMARY KEY, ThisValue varchar(MAX))
+  INSERT INTO @tvValues (ThisValue)
+  EXEC sp_executesql @statement=@SQL
+  
+  DECLARE curRes CURSOR LOCAL STATIC FOR
+  SELECT ThisValue FROM @tvValues ORDER BY Seq
+
+  OPEN curRes
+  
+  SET @Result = ''
+  FETCH curRes INTO @ThisValue
+  WHILE @@FETCH_STATUS = 0 BEGIN
+    SET @Result = @Result + ISNULL(@ResultPrefix, '') + @ThisValue + ISNULL(@ResultSuffix, '') +
+      CASE WHEN @IncludeLineBreaks = 1 THEN @CRLF ELSE '' END
+    FETCH curRes INTO @ThisValue
+  END
+  CLOSE curRes
+  DEALLOCATE curRes
+    
+  WHILE @TrimTrailSuffix = 1 AND LEN(@ResultSuffix) > 0 AND PATINDEX('%' + REVERSE(@ResultSuffix) + '%', REVERSE(@Result)) = 1 BEGIN
+    SET @Result = SUBSTRING(@Result, 1, (LEN(@Result + 'x') - 1) - (LEN(@ResultSuffix + 'x') - 1))  
+  END
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfFindInSQL]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfFindInSQL]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfFindInSQL](
+@TargetStr nvarchar(MAX),
+@SQL nvarchar(MAX),
+@StartPos int)
+RETURNS int
+
+WITH EXECUTE AS OWNER
+--$!SQLVer Nov  7 2020  5:10AM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  DECLARE @Chunk nvarchar(MAX)
+  DECLARE @Found bit
+  DECLARE @P int
+  DECLARE @Delims varchar(40)
+  SET @Delims =  ' ' + ';' + CHAR(13) + CHAR(10) + CHAR(9)
+  
+  SET @Found = 0        
+  SET @P = 0        
+  
+  IF @StartPos IS NULL BEGIN
+    SET @StartPos = 0
+  END
+  
+  SET @SQL = @SQL + CHAR(13)
+  
+  SET @Chunk = RIGHT(@SQL, LEN(@SQL) - @StartPos)
+  WHILE (@Found = 0) AND (@P IS NOT NULL) BEGIN
+    SET @P = PATINDEX('%' + @TargetStr + '[' + @Delims + ']%', @Chunk)
+
+    IF @P = 0 BEGIN
+      --Didn't find @TargetStr immediately followed by a delimiter.
+      --Try immediately followed by inline comment.
+      SET @P = PATINDEX('%' + @TargetStr + '--%', @Chunk)
+    END
+                
+    IF @P = 0 BEGIN
+      --Didn't find @TargetStr immediately followed by a delimiter or inline comment.
+      --Try immediately followed by block comment.
+      SET @P = PATINDEX('%' + @TargetStr + '/*%', @Chunk)
+    END      
+
+    IF (@P > 0) BEGIN
+      IF 
+        --sqlver.udfIsInComment(@StartPos + @P, @SQL) = 0 AND
+        --udfSQLTerm checks for comments
+        sqlver.udfSQLTerm(@StartPos + @P, @SQL) LIKE 'Word:%' BEGIN
+        SET @Found = 1
+        BREAK
+      END
+      ELSE BEGIN
+        SET @StartPos = @StartPos + @P
+        SET @Chunk = RIGHT(@SQL, LEN(@SQL) - @StartPos)
+      END
+    END
+    ELSE BEGIN
+      SET @P = NULL
+    END              
+  END
+  
+  RETURN ISNULL(@StartPos + @P, 0)
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfHashBytesNMax]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfHashBytesNMax]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfHashBytesNMax](@Algorithm sysname = 'SHA2_256', @Input nvarchar(MAX))
+RETURNS varbinary(MAX)
+--$!SQLVer Nov  7 2020  5:10AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  IF @Algorithm IS NULL BEGIN
+    SET @Algorithm = 'SHA2_256'
+  END
+
+  DECLARE @Result varbinary(MAX)
+
+  DECLARE @Chunk int
+  DECLARE @ChunkSize int
+  DECLARE @ChunkInput nvarchar(MAX)
+  
+  SET @ChunkSize = 4000
+  SET @Chunk = 1
+  SET @Result = CAST('' AS varbinary(MAX))
+
+  WHILE @Chunk * @ChunkSize < LEN(@Input + 'x') - 1 BEGIN
+    --Append the hash for each chunk
+    SET @ChunkInput = SUBSTRING(@Input, ((@Chunk - 1) * @ChunkSize) + 1, @ChunkSize)
+    SET @Result = @Result + HASHBYTES(@Algorithm, @ChunkInput)
+    SET @Chunk = @Chunk + 1
+  END
+
+  --Append the hash for the final partial chunk
+  SET @ChunkInput = RIGHT(@Input, LEN(@Input + 'x') - 1 - ((@Chunk - 1) * @ChunkSize))
+  SET @Result = @Result + HASHBYTES(@Algorithm, @CHunkInput)
+
+  IF @Chunk > 1 BEGIN
+    --If we have appended more than one hash, hash the hash.
+    --We want to return just normal 160 bit (or whatever the @Algorithm calls for) value,
+    --but at the moment we have any number of concatenated hash values in @Result.
+    --We therefore need to hash the whole @Result buffer. 
+    SET @Result = HASHBYTES(@Algorithm, @Result)    
+  END
+  
+  RETURN @Result
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfIsInComment]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfIsInComment]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfIsInComment](
+@CharIndex int,
+@SQL nvarchar(MAX))
+RETURNS BIT
+
+WITH EXECUTE AS OWNER
+--$!SQLVer Nov  7 2020  5:10AM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  DECLARE @Result bit
+  
+  IF @CharIndex < 3 BEGIN
+    SET @Result = 0
+  END
+  ELSE IF @CharIndex > LEN(@SQL + 'x') - 1 BEGIN
+    SET @Result = NULL
+  END
+  ELSE BEGIN
+    DECLARE @InComment bit
+    DECLARE @InBlockComment bit
+    
+    DECLARE @P int
+    DECLARE @C char(1)
+    DECLARE @C2 char(1)
+
+    SET @InComment = 0
+    SET @InBlockComment = 0
+    SET @P = 1
+    WHILE @P <= LEN(@SQL + 'x') - 1 - 1 BEGIN
+      SET @C = SUBSTRING(@SQL, @P, 1)
+      SET @C2 = SUBSTRING(@SQL, @P+1, 1)
+    
+      IF @InBlockComment = 1 BEGIN
+        IF @C + @C2 = '*/' SET @InBlockComment = 0
+      END
+      ELSE IF @InComment = 1 BEGIN
+        IF @C IN (CHAR(13), CHAR(10)) SET @InComment = 0
+      END
+      ELSE IF @C + @C2 = '/*' BEGIN
+        SET @InBlockComment = 1
+      END
+      ELSE IF @C + @C2 = '--' BEGIN
+        SET @InComment = 1
+      END
+      
+      IF @P + 2 >= @CharIndex BEGIN
+        BREAK
+      END
+      ELSE BEGIN    
+        SET @P = @P + 1  
+      END
+    END
+    
+   SET @Result = CASE WHEN ((@InComment = 1) OR (@InBlockComment = 1)) THEN 1 ELSE 0 END
+    
+  END
+  
+  RETURN @Result
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfLTRIMSuper]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfLTRIMSuper]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfLTRIMSuper](@S varchar(MAX))
+RETURNS varchar(MAX)
+--$!SQLVer Nov  7 2020  5:10AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  DECLARE @Result varchar(MAX)
+  DECLARE @P int
+  SET @P = 1
+  WHILE @P <= LEN(@S + 'x') - 1 BEGIN
+    IF SUBSTRING(@S, @P, 1) IN  (' ', CHAR(9), CHAR(10), CHAR(13)) BEGIN
+      SET @P = @P + 1
+    END
+    ELSE BEGIN
+      BREAK
+    END
+  END
+  
+  SET @Result = RIGHT(@S, LEN(@S + 'x') - 1 - @P + 1)
+  
+  RETURN @Result  
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfRTRIMSuper]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfRTRIMSuper]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfRTRIMSuper](@S varchar(MAX))
+RETURNS varchar(MAX)
+--$!SQLVer Nov  7 2020  5:09AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  DECLARE @Result varchar(MAX)
+  DECLARE @P int
+  SET @P = LEN(@S + 'x') - 1
+  WHILE @P >= 1 BEGIN
+    IF ISNULL(SUBSTRING(@S, @P, 1), ' ') IN (' ', CHAR(9), CHAR(10), CHAR(13)) BEGIN
+      SET @P = @P - 1
+    END
+    ELSE BEGIN
+      BREAK
+    END
+  END
+  
+  SET @Result = LEFT(@S, @P)
+  
+  RETURN @Result  
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfScriptTable]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfScriptTable]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfScriptTable](
+@SchemaName sysname, --can contain schema.name if @ObjectName is NULL
+@ObjectName sysname = NULL)   --can be NULL
+RETURNS varchar(MAX)
+
+WITH EXECUTE AS OWNER
+--$!SQLVer Aug  3 2021  9:53AM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  --Based on script contributed by Marcello - 25/09/09, in comment to article posted by 
+  --Tim Chapman, TechRepublic, 2008/11/20
+  --http://www.builderau.com.au/program/sqlserver/soa/Script-Table-definitions-using-TSQL/0,339028455,339293405,00.htm
+  
+  --Formatting altered by David Rueter (drueter@assyst.com) 2010/05/11 to match
+  --script generated by MS SQL Server Management Studio 2005
+
+  IF @ObjectName IS NULL BEGIN
+    SET @ObjectName = PARSENAME(@SchemaName, 1)
+    SET @SchemaName = PARSENAME(@SchemaName, 2)
+  END
+  ELSE BEGIN
+    SET @ObjectName = PARSENAME(@ObjectName, 1)
+    SET @SchemaName = PARSENAME(@SchemaName, 1)
+  END
+  
+
+  DECLARE @Id int,
+  @i int,
+  @i2 int,
+  @Sql varchar(MAX),
+  @Sql2 varchar(MAX),
+  @f1 varchar(5),
+  @f2 varchar(5),
+  @f3 varchar(5),
+  @f4 varchar(5),
+  @T varchar(5)
+
+  SELECT
+    @Id=obj.object_id,
+    @f1 = CHAR(13) + CHAR(10),
+    @f2 = CHAR(9),
+    @f3=@f1+@f2,
+    @f4=',' + @f3
+  FROM
+    sys.schemas sch
+    JOIN sys.objects obj ON
+      sch.schema_id = obj.schema_id
+  WHERE
+    sch.name LIKE @SchemaName AND
+    obj.name LIKE @ObjectName    
+
+  IF @Id IS NULL RETURN NULL
+
+  DECLARE @tvData table(
+    Id int identity primary key,
+    D varchar(max) not null,
+    ic int null,
+    re int null,
+    o int not null);
+
+  -- Columns
+  WITH c AS(
+    SELECT
+      c.column_id,
+      Nr = ROW_NUMBER() OVER (ORDER BY c.column_id),
+      Clr=COUNT(*) OVER(),
+      D = QUOTENAME(c.name) + ' ' +
+        CASE 
+          WHEN s.name = 'sys' OR c.is_computed=1 THEN '' 
+          ELSE QUOTENAME(s.name) + '.' 
+        END +        
+        
+        CASE
+          WHEN c.is_computed=1 THEN ''
+          WHEN s.name = 'sys' THEN QUOTENAME(t.Name)
+          ELSE QUOTENAME(t.name)
+        END +
+        
+        CASE
+          WHEN ((c.user_type_id <> c.system_type_id) OR (c.is_computed=1)) THEN ''
+          WHEN t.Name IN (
+            'xml', 'uniqueidentifier', 'tinyint', 'timestamp', 'time', 'text', 'sysname',
+            'sql_variant', 'smallmoney', 'smallint', 'smalldatetime', 'ntext', 'money',
+            'int', 'image', 'hierarchyid', 'geometry', 'geography', 'float', 'datetimeoffset',
+            'datetime2', 'datetime', 'date', 'bigint', 'bit') THEN ''
+          WHEN t.Name in(
+            'varchar','varbinary', 'real', 'nvarchar', 'numeric', 'nchar', 'decimal', 'char', 'binary') THEN
+            '(' + ISNULL(CONVERT(varchar, NULLIF(
+            CASE
+             WHEN t.Name IN ('numeric', 'decimal') THEN c.precision
+             WHEN c.max_length = -1 THEN c.max_length
+             WHEN t.Name IN ('nchar', 'nvarchar') THEN c.max_length / 2
+             ELSE c.max_length
+            END, -1)), 'MAX') + 
+            ISNULL(',' + CONVERT(varchar, NULLIF(c.scale, 0)), '') + ')'
+          ELSE '??'
+        END + 
+        
+        CASE 
+          WHEN ic.object_id IS NOT NULL THEN ' IDENTITY(' + CONVERT(varchar, ic.seed_value) + ',' +
+            CONVERT(varchar,ic.increment_value) + ')'
+          ELSE ''
+        END +
+          
+        CASE
+          WHEN c.is_computed = 1 THEN 'AS' + cc.definition 
+          WHEN c.is_nullable = 1 THEN ' NULL'
+          ELSE ' NOT NULL'
+        END +
+
+        CASE c.is_rowguidcol 
+          WHEN 1 THEN ' rowguidcol'
+          ELSE ''
+        END +
+
+        CASE 
+          WHEN d.object_id IS NOT NULL THEN  ' CONSTRAINT ' + QUOTENAME(d.name) + ' DEFAULT ' + d.definition
+          ELSE '' 
+        END  
+
+    FROM
+      sys.columns c
+      INNER JOIN sys.types t ON t.user_type_id = c.user_type_id
+      INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+      LEFT OUTER JOIN sys.computed_columns cc ON
+        cc.object_id = c.object_id AND
+        cc.column_id = c.column_id
+
+      LEFT OUTER JOIN sys.default_constraints d ON
+        d.parent_object_id = @id AND
+        d.parent_column_id=c.column_id
+
+      LEFT OUTER JOIN sys.identity_columns ic ON
+        ic.object_id = c.object_id AND
+        ic.column_id=c.column_id
+
+    WHERE
+      c.object_id=@Id  
+  )
+
+  INSERT INTO @tvData(D, o)
+  SELECT
+    CHAR(9) + D + CASE Nr WHEN Clr THEN '' ELSE ',' + @f1 END,
+    0
+  FROM c
+  ORDER by column_id
+  
+
+  -- SubObjects
+  SET @i=0
+
+  WHILE 1=1 BEGIN
+
+    SELECT TOP 1
+      @i = c.object_id,
+      @T = c.type,
+      @i2=i.index_id
+    FROM
+      sys.objects c 
+      LEFT OUTER JOIN sys.indexes i ON
+        i.object_id = @Id AND
+        i.name=c.name
+    WHERE
+      parent_object_id=@Id AND
+      c.object_id>@i AND
+      c.type NOT IN ('D', 'TR') --ignore triggers as of 1/15/2012
+    ORDER BY c.object_id
+
+    IF @@rowcount=0 BREAK
+
+    IF @T = 'C' BEGIN
+      INSERT INTO @tvData 
+      SELECT
+        @f4 + 'CHECK ' +
+          CASE is_not_for_replication 
+            WHEN 1 THEN 'NOT FOR REPLICATION '
+            ELSE ''
+          END + definition, null, null, 10
+      FROM
+        sys.check_constraints 
+      WHERE object_id=@i
+    END
+    ELSE IF @T = 'Pk' BEGIN
+      INSERT INTO @tvData 
+      SELECT
+        @f4 + 'CONSTRAINT ' + 
+        QUOTENAME('pk' + REPLACE(@ObjectName, 'tbl', '')) +
+        ' PRIMARY KEY' + ISNULL(' ' + NULLIF(UPPER(i.type_desc),'NONCLUSTERED'), ''),
+        @i2, null, 20      
+      FROM sys.indexes i
+      WHERE
+        i.object_id=@Id AND i.index_id=@i2
+    END
+    ELSE IF @T = 'uq' BEGIN
+      INSERT INTO @tvData VALUES(@f4 + 'UNIQUE', @i2, null, 30)
+    END
+    ELSE IF @T = 'f' BEGIN
+      INSERT INTO @tvData 
+      SELECT
+        @f4 + 'CONSTRAINT ' +  QUOTENAME(f.name) +
+        ' FOREIGN KEY ',
+        -1,
+        @i,
+        40
+      FROM
+        sys.foreign_keys f        
+      WHERE
+        f.object_id=@i
+          
+      INSERT INTO @tvData 
+      SELECT ' REFERENCES ' + QUOTENAME(s.name) + '.' + QUOTENAME(o.name), -2, @i, 41
+      FROM
+        sys.foreign_keys f
+        INNER JOIN sys.objects o ON o.object_id = f.referenced_object_id
+        INNER JOIN sys.schemas s ON s.schema_id = o.schema_id
+      WHERE
+        f.object_id=@i
+      
+      INSERT INTO @tvData 
+      SELECT ' NOT FOR REPLICATION', -3, @i, 42
+      FROM
+        sys.foreign_keys f
+        INNER JOIN sys.objects o ON o.object_id = f.referenced_object_id
+        INNER JOIN sys.schemas s ON s.schema_id = o.schema_id
+      WHERE
+        f.object_id = @i AND
+        f.is_not_for_replication=1
+    END
+    ELSE BEGIN
+      INSERT INTO @tvData
+      VALUES(@f4 + 'Unknow SubObject [' + @T + ']', null, null, 99)
+    END
+  END
+
+  INSERT INTO @tvData
+  VALUES(@f1+') ON ' + QUOTENAME('PRIMARY'), null, null, 100)  
+  
+  -- Indexes
+  INSERT INTO @tvData
+  SELECT
+    @f1 + CHAR(13) + CHAR(10) + 'CREATE ' +
+      CASE is_unique WHEN 1 THEN 'UNIQUE ' ELSE '' END +
+      UPPER(s.type_desc) + ' INDEX ' + 
+      s.name  + ' ON ' +
+      QUOTENAME(sc.Name) + '.' + QUOTENAME(o.name),      
+
+    index_id,
+    NULL,
+    1000
+  FROM 
+    sys.indexes s
+    INNER JOIN sys.objects o ON o.object_id = s.object_id
+    INNER JOIN sys.schemas sc ON sc.schema_id = o.schema_id
+  WHERE
+    s.object_id = @Id AND
+    is_unique_constraint = 0 AND
+    is_primary_key = 0 AND
+    s.type_desc <> 'heap'
+
+  -- Columns
+  SET @i=0
+  WHILE 1=1 BEGIN
+    SELECT TOP 1 
+      @i = ic
+    FROM
+      @tvData
+    WHERE
+      ic > @i
+    ORDER BY ic 
+
+    IF @@ROWCOUNT = 0 BREAK
+
+    SELECT
+      @i2=0,
+      @Sql=NULL,
+      @Sql2=NULL--,
+      --@IxCol=NULL
+        
+    WHILE 1=1 BEGIN
+      SELECT 
+        @i2 = index_column_id, 
+              
+        @Sql = CASE c.is_included_column 
+          WHEN 1 THEN @Sql
+          ELSE ISNULL(@Sql + ', ', CHAR(13) + CHAR(10) + '(' + CHAR(13) + CHAR(10)) + '  ' + QUOTENAME(cc.Name) + 
+            CASE c.is_descending_key 
+              WHEN 1 THEN ' DESC'
+              ELSE ' ASC'
+            END
+          END,
+          
+        @Sql2 = CASE c.is_included_column 
+          WHEN 0 THEN @Sql2 
+          ELSE ISNULL(@Sql2 + ', ', CHAR(13) + CHAR(10) + '(' + CHAR(13) + CHAR(10)) + '  ' + QUOTENAME(cc.Name) --+ 
+--            CASE c.is_descending_key 
+--              WHEN 1  THEN ' DESC'
+--              ELSE ' ASC' 
+--            END
+          END
+
+        FROM
+          sys.index_columns c
+          INNER JOIN sys.columns cc ON
+            c.column_id = cc.column_id AND
+            cc.object_id = c.object_id
+        WHERE
+          c.object_id = @Id AND
+          index_id=@i AND
+          index_column_id > @i2
+        ORDER BY
+          index_column_id
+
+        IF @@ROWCOUNT = 0 BREAK
+                  
+      END
+      
+      
+      UPDATE @tvData
+      SET
+        D = D + @Sql + CHAR(13) + CHAR(10) + ')' +
+        ISNULL(' INCLUDE' + @Sql2 + ')', '') +
+        'WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON ' + QUOTENAME('PRIMARY')
+        
+      WHERE
+        ic = @i
+    END
+
+    
+
+    -- References
+    SET @i = 0
+
+    WHILE 1 = 1 BEGIN
+      SELECT TOP 1 
+        @i = re
+      FROM
+        @tvData
+      WHERE
+         re > @i
+      ORDER BY re
+
+      IF @@ROWCOUNT = 0 BREAK
+    
+      SELECT
+        @i2=0,
+        @Sql=NULL,
+        @Sql2=NULL
+      
+      WHILE 1=1 BEGIN
+        SELECT 
+          @i2=f.constraint_column_id, 
+          @Sql = ISNULL(@Sql + ', ', '(') + QUOTENAME(c1.Name),
+          @Sql2 = ISNULL(@Sql2 + ', ', '(') + QUOTENAME(c2.Name)
+        FROM
+          sys.foreign_key_columns f
+          INNER JOIN sys.columns c1 ON
+            c1.column_id = f.parent_column_id AND
+            c1.object_id = f.parent_object_id
+          INNER JOIN sys.columns c2 ON
+            c2.column_id = f.referenced_column_id AND
+            c2.object_id = f.referenced_object_id
+        WHERE
+          f.constraint_object_id = @i AND
+          f.constraint_column_id > @i2
+        ORDER BY
+          f.constraint_column_id
+
+        IF @@ROWCOUNT = 0 BREAK
+
+      END
+
+      UPDATE @tvData 
+      SET
+        D = D + @Sql + ')' --close foreign key
+      WHERE
+        re = @i AND
+        ic = -1
+
+      UPDATE @tvData
+      SET
+        D = D + @Sql2 + ')'
+      WHERE
+        re = @i AND
+        ic = -2
+    END;
+
+  -- Render
+  WITH x AS (
+    SELECT
+      id = d.id-1,
+      D = d.D + ISNULL(d2.D, '')
+    FROM
+      @tvData d
+      LEFT OUTER JOIN @tvData d2 ON
+        d.re = d2.re AND
+        d2.o = 42
+    WHERE
+      d.o = 41    
+  )
+
+  UPDATE @tvData
+  SET
+    D = d.D + x.D
+  FROM
+    @tvData d
+    INNER JOIN x ON x.id=d.id  
+
+  DELETE FROM @tvData
+  WHERE
+    o IN (41, 42)
+    
+  SELECT
+    @Sql = 'CREATE TABLE ' + QUOTENAME(s.name) + '.' + QUOTENAME(o.name) + '(' + @f1
+  FROM
+    sys.objects o
+    INNER JOIN sys.schemas s
+  ON
+    o.schema_id = s.schema_id
+  WHERE
+    o.object_id = @Id
+
+  SET @i = 0
+
+  WHILE 1 = 1 BEGIN
+    SELECT TOP 1
+      @I = Id,
+      @Sql = @Sql + D 
+    FROM
+      @tvData
+    ORDER BY
+      o,
+      CASE WHEN o=0 THEN RIGHT('0000' + CONVERT(VARCHAR, id), 5)  ELSE D END,
+      id
+
+    IF @@ROWCOUNT = 0 BREAK
+
+    DELETE FROM @tvData
+    WHERE
+      id = @i
+
+  END
+
+  RETURN @Sql
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfScriptType]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfScriptType]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfScriptType](
+@SchemaName sysname, --can contain schema.name if @ObjectName is NULL
+@ObjectName sysname   --can be NULL
+)
+RETURNS nvarchar(MAX)
+--$!SQLVer Nov  7 2020  5:09AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+
+  IF @ObjectName IS NULL BEGIN
+    SET @ObjectName = PARSENAME(@SchemaName, 1)
+    SET @Schemaname = PARSENAME(@SchemaName, 2)
+  END
+  ELSE BEGIN
+    SET @ObjectName = PARSENAME(@ObjectName, 1)
+    SET @SchemaName = PARSENAME(@SchemaName, 1)
+  END
+
+  DECLARE @TypeDef nvarchar(MAX)
+  DECLARE @ColDef nvarchar(MAX)
+  DECLARE @TypeID int
+  DECLARE @IsTableType bit
+  DECLARE @FQObjName nvarchar(512)
+
+  SELECT
+    @TypeDef = 
+      'CREATE TYPE [' + sch.name + '].[' + typ.name + '] AS ' +
+      CASE WHEN typ.is_table_type = 1 THEN 'TABLE(' ELSE 'UNKNOWN' END,
+
+    @TypeID = typ.user_type_id,
+    @IsTableType = typ.is_table_type
+  FROM
+    sys.types typ
+    JOIN sys.schemas sch ON
+      typ.schema_id = sch.schema_id
+  WHERE
+    typ.is_user_defined = 1 AND
+    sch.name = @SchemaName AND
+    typ.name = @ObjectName
+
+
+  IF @IsTableType = 1 BEGIN
+
+    SELECT
+      @ColDef = ISNULL(@ColDef + ',' + NCHAR(13) + NCHAR(10), '') +
+        '  ' + x.coldef
+    FROM
+      (
+      SELECT
+        tt.user_type_id,
+        col.column_id,
+        '[' + col.name + '] ' +
+        '[' + typ.name + ']' + 
+          CASE
+            WHEN typ.name IN ('decimal', 'numeric')
+              THEN '(' + CAST(col.precision AS varchar(100)) + ', ' + CAST(col.scale AS varchar(100)) + ')'
+            WHEN typ.name IN ('char', 'nchar', 'binary', 'varchar', 'nvarchar')
+              THEN '(' + ISNULL(CAST(NULLIF(col.max_length, -1) / 
+                CASE
+                  WHEN typ.name IN ('nchar', 'nvarchar') THEN 2
+                  ELSE 1
+                END AS varchar(100)), 'max') + ')'
+            ELSE ''
+          END +
+          CASE
+            WHEN typ.is_nullable = 1 THEN ' NULL'
+            ELSE ''
+          END AS coldef
+      FROM
+        sys.table_types tt
+        JOIN sys.columns col ON
+          tt.type_table_object_id = col.object_id 
+        JOIN sys.types typ ON
+          col.user_type_id = typ.user_type_id
+      ) x
+    WHERE
+      x.user_type_id = @TypeID
+
+    SET @TypeDef = @TypeDef + NCHAR(13) + NCHAR(10) + ISNULL(@ColDef + 
+    NCHAR(13) + NCHAR(10) + '  )', '')
+  END
+
+  RETURN @TypeDef
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfSQLTerm]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfSQLTerm]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfSQLTerm](
+@CharIndex int,
+@SQL nvarchar(MAX))
+RETURNS varchar(30)
+--$!SQLVer Nov  7 2020  5:10AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  DECLARE @Result varchar(30)
+  
+  --Given a string @SQL, determine the type of term that postion
+  --@CharIndex is in.
+  SET @SQL = RTRIM(@SQL)
+  
+  IF @CharIndex > LEN(@SQL) BEGIN
+    SET @Result = NULL
+  END
+  ELSE BEGIN
+    DECLARE @Mode int
+      --1 = String Literal
+      --2 = Quoted Identifier
+      --3 = Variable Name
+      --4 = Comment
+      --5 = Block Comment
+      --currently cannot distinguish unquoted identifier from command 
+
+    DECLARE @PrevMode int
+      
+    DECLARE @IsWhitespace bit
+    DECLARE @IsOperator bit
+     
+    DECLARE @P int
+    DECLARE @C char(1)
+    DECLARE @C2 CHAR(1)
+    
+    DECLARE @WordPos int
+    SET @WordPos = 0
+       
+    SET @Mode = 0    
+    SET @P = 1
+    WHILE @P <= @CharIndex BEGIN
+      SET @C = SUBSTRING(@SQL, @P, 1)
+      
+      IF @P < LEN(@SQL) BEGIN
+        SET @C2 = SUBSTRING(@SQL, @P + 1, 1)
+      END
+      ELSE BEGIN
+        SET @C2 = NULL
+      END
+      
+      IF (@Mode = 0) BEGIN
+        IF @C IN (CHAR(39), '[', '@', '-', '/') BEGIN
+          IF @C = CHAR(39) SET @Mode = 1
+          ELSE IF @C = '[' SET @Mode = 2
+          ELSE IF @C = '@' SET @Mode = 3
+          ELSE IF @C = '-' AND @C2 = '-' BEGIN
+            SET @Mode = 4
+            SET @P = @P + 1
+          END
+          ELSE IF @C = '/' AND @C2 = '*' BEGIN
+            SET @Mode = 5
+            SET @P = @P + 1
+          END
+        END
+        ELSE BEGIN
+          SET @IsWhitespace = CASE WHEN @C IN (' ', CHAR(9), CHAR(10), CHAR(13)) THEN 1 ELSE 0 END
+          SET @IsOperator = CASE WHEN @C IN ('+', '-', '*', '/', '=', '.') THEN 1 ELSE 0 END
+        END
+      END
+      ELSE IF (@Mode = 1) AND (@C = CHAR(39)) SET @Mode = 0
+      ELSE IF (@Mode = 2) AND (@C = ']') SET @Mode = 0
+      ELSE IF (@Mode = 3) AND (@C IN ('=', ' ')) SET @Mode = 0
+      ELSE IF (@Mode = 4) AND (@C = CHAR(13)) SET @Mode = 0
+      ELSE IF (@Mode = 5) AND (@C = '*') AND (@C2 = '/') SET @Mode = 0
+
+      IF (@IsWhitespace = 1) OR (@IsOperator = 1) BEGIN
+        SET @WordPos = 0
+      END
+      ELSE IF (@Mode <> @PrevMode) BEGIN
+        SET @WordPos = 1
+      END
+      ELSE BEGIN 
+        SET @WordPos = @WordPos + 1        
+      END
+
+      SET @PrevMode = @Mode      
+      SET @P = @P + 1
+    END
+    
+    IF @Mode = 0 BEGIN
+      IF @IsWhitespace = 1 SET @Result = 'Whitespace'
+      ELSE IF @IsOperator = 1 SET @Result = 'Operator'
+      ELSE SET @Result = 'Word' + ':' + ISNULL(CAST(@WordPos AS varchar(100)), 'NULL')
+    END
+    ELSE BEGIN
+      IF @Mode = 1 SET @Result = 'Literal'
+      ELSE IF @Mode = 2 SET @Result = 'QuotedIdent'
+      ELSE IF @Mode = 3 SET @Result = 'VariableName'
+      ELSE IF @Mode IN (4, 5) SET @Result = 'Comment'
+    END
+     
+  END
+  
+  RETURN @Result
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfStripSQLCommentsExcept]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfStripSQLCommentsExcept]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfStripSQLCommentsExcept](
+@SQL nvarchar(MAX),
+@ExceptStartsWith nvarchar(MAX)
+)
+RETURNS nvarchar(MAX)
+--$!SQLVer Nov  7 2020  5:10AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+
+  DECLARE @L int
+  SET @L = LEN(@SQL)
+  IF @L > ISNULL((SELECT MAX(Number) FROM sqlver.tblNumbers), 0) BEGIN
+    RETURN CAST('Error in sqlver.udfStripSQLCommentsExcept:  String length (' + CAST(@L AS varchar(100)) + ') exceeds maximum number in slqlver.tblNumbers.' AS int)
+  END
+
+  --Make sure there is an EOL at the end
+  SET @SQL = @SQL + CHAR(13)
+
+  /*
+  This table variable has a row for each character in the string,
+  along with flags that describe the character.  EndPos pertains
+  to certain character runs such as comments.
+  */
+  DECLARE @tvSQL TABLE (
+    Pos int PRIMARY KEY,
+    EndPos int,
+    ThisChar nchar,  
+    --StartQIdent bit DEFAULT (0),  --Quoted identifiers like [SomeObject]
+    --StartVar bit DEFAULT (0),     --Variables like @SomeVar
+    --StartLit bit DEFAULT (0),     --String literals like 'some text'
+    StartCom1 bit DEFAULT (0),      --Start of comment like --some comment
+    StartCom2 bit DEFAULT (0),      --Start of block comment like /* some block comment */
+    --IsWhite bit DEFAULT (0),      --Whitespace (space, tab, CR, LF)
+    --IsOper  bit DEFAULT (0),      --SQL operator like + - = etc.
+    IsComment bit DEFAULT (0),      --Comment character
+    --IsEOL bit DEFAULT (0),        --End of Line (CR LF ;)
+    ToStrip bit DEFAULT(0)          --This character should be stripped from results
+  )
+
+  INSERT INTO @tvSQL (
+    Pos,
+    ThisChar
+  )
+  SELECT
+    n.Number,
+    SUBSTRING(@SQL, n.Number, 1)
+  FROM
+    sqlver.tblNumbers n
+  WHERE
+    n.Number <= LEN(@SQL + 'x') - 1    
+    
+  UPDATE t1
+    SET 
+      --StartQIdent = CASE WHEN t_qident.Pos IS NOT NULL THEN 1 ELSE 0 END,
+      --StartVar = CASE WHEN t_var.Pos IS NOT NULL THEN 1 ELSE 0 END,
+      StartCom1 = CASE WHEN t_com1.Pos IS NOT NULL THEN 1 ELSE 0 END,
+      StartCom2 = CASE WHEN t_com2.Pos IS NOT NULL THEN 1 ELSE 0 END
+      --IsWhite = CASE WHEN t_white.Pos IS NOT NULL THEN 1 ELSE 0 END,
+      --IsOper = CASE WHEN t_oper.Pos IS NOT NULL THEN 1 ELSE 0 END,
+      --IsEOL = CASE WHEN t_EOL.Pos IS NOT NULL THEN 1 ELSE 0 END,
+      --EndPos = CASE WHEN t_qident.Pos IS NOT NULL THEN t_qident.EndPos END
+  FROM 
+    @tvSQL t1
+
+    ----detect variable
+    --LEFT JOIN @tvSQL t_var ON
+    --  t1.Pos = t_var.Pos AND
+    --  t1.ThisChar = '@'  
+
+    ----detect quoted identifier
+    --LEFT JOIN (
+    --  SELECT
+    --    t1.Pos,
+    --    MIN(t2.Pos) AS EndPos
+    --  FROM
+    --    @tvSQL t1  
+    --    LEFT JOIN @tvSQL t2 ON
+    --      t1.Pos < t2.Pos AND
+    --      t2.ThisChar = ']'    
+    --  WHERE
+    --    t1.ThisChar = '['
+    --  GROUP BY
+    --    t1.Pos
+    --  ) t_qident ON
+    --    t1.Pos = t_qident.Pos AND
+    --    t1.ThisChar = '['             
+    
+    -- detect single-line comment
+    LEFT JOIN (
+      SELECT
+        t1.Pos
+      FROM    
+        @tvSQL t1
+        JOIN @tvSQL t1a ON
+          t1.Pos + 1 = t1a.Pos AND
+          t1.ThisChar = '-' AND
+          t1a.ThisChar = '-'
+     ) t_com1 ON
+       t1.Pos = t_com1.Pos          
+            
+    -- detect block comment
+    LEFT JOIN (
+      SELECT
+        t1.Pos
+      FROM    
+        @tvSQL t1
+        JOIN @tvSQL t1a ON
+          t1.Pos + 1 = t1a.Pos AND
+          t1.ThisChar = '/' AND
+          t1a.ThisChar = '*'
+     ) t_com2 ON
+       t1.Pos = t_com2.Pos              
+           
+    -- detect whitespace
+    --LEFT JOIN @tvSQL t_white ON
+    --  t1.Pos = t_white.Pos AND    
+    --  t1.ThisChar IN (' ', CHAR(9), CHAR(10), CHAR(13))        
+      
+    -- detect SQL operator
+    --LEFT JOIN @tvSQL t_oper ON
+    --  t1.Pos = t_oper.Pos AND
+    --  (
+    --   (t1.ThisChar IN ('+', '*', '=', '.', ';', '(', ')')) OR
+    --   (t1.ThisChar = '-' AND t_com1.Pos IS NULL) OR
+    --   (t1.ThisChar = '/' AND t_com2.Pos IS NULL)
+    --  )
+    
+    -- detect EOL
+    --LEFT JOIN @tvSQL t_EOL ON
+    --  t1.Pos = t_EOL.Pos AND
+    --  t1.ThisChar IN (';', CHAR(13), CHAR(10))
+       
+  --identify end of single-line comment (up to but not including first EOL)
+  UPDATE @tvSQL
+  SET EndPos = Pos + PATINDEX('%[' + CHAR(13) + CHAR(10) + ']%', STUFF(@SQL, 1, Pos, ''))
+  WHERE
+    StartCom1 = 1
+    
+  --identify end of block comment
+  UPDATE @tvSQL
+  SET EndPos = Pos + PATINDEX('%*/%', STUFF(@SQL, 1, Pos, '')) + 2
+  WHERE
+    StartCom2 = 1
+    
+  --flag individual comment characters
+  UPDATE t2
+  SET
+    IsComment = 1,
+    ToStrip = 1
+  FROM
+    @tvSQL t1
+    JOIN @tvSQL t2 ON
+      t2.Pos >= t1.Pos AND
+      t2.Pos <= t1.EndPos    
+  WHERE
+    (t1.StartCom1 = 1 OR t1.StartCom2 = 1)
+
+
+  --unflag comments that are like @ExceptStartsWith
+  IF @ExceptStartsWith IS NOT NULL BEGIN
+    UPDATE t3
+    SET
+      ToStrip = 0
+    FROM
+      (
+      SELECT
+        t1.Pos,
+        t1.EndPos,
+          (SELECT
+            '' + t2.ThisChar
+            FROM @tvSQL t2
+            WHERE
+              t2.Pos >= t1.Pos + 2 AND
+              t2.Pos <= t1.EndPos - CASE WHEN t1.StartCom2 = 1 THEN 2 ELSE 0 END 
+            ORDER BY
+              t2.Pos
+            FOR XML PATH(''), TYPE
+          ).value('.', 'nvarchar(MAX)') AS CommentBuf
+      FROM
+        @tvSQL t1
+      WHERE
+       (t1.StartCom1 = 1 OR t1.StartCom2 = 1)
+      GROUP BY
+        t1.Pos,
+        t1.EndPos,
+        t1.StartCom2
+      ) x
+      JOIN @tvSQL t3 ON
+        t3.Pos >= x.Pos AND
+        t3.Pos <= x.EndPos
+    WHERE
+      x.CommentBuf LIKE @ExceptStartsWith + '%'
+  END
+  
+  DECLARE @Buf nvarchar(MAX)
+
+  SET @Buf =
+   (
+    SELECT
+      t1.ThisChar + ''
+    FROM
+      @tvSQL t1
+    WHERE
+      ToStrip = 0
+    FOR XML PATH(''), TYPE
+   ).value('.', 'nvarchar(MAX)')
+
+
+  --Remove EOL that we added at the end  
+  RETURN LEFT(@Buf, LEN(@Buf + 'x') - 1)  
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfStripSQLComments]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfStripSQLComments]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfStripSQLComments](
+@SQL nvarchar(MAX)
+)
+RETURNS nvarchar(MAX)
+--$!SQLVer Nov  7 2020  5:09AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+
+  DECLARE @L int
+  SET @L = LEN(@SQL)
+  IF @L > ISNULL((SELECT MAX(Number) FROM sqlver.tblNumbers), 0) BEGIN
+    RETURN CAST('Error in sqlver.udfStripSQLComments:  String length (' + CAST(@L AS varchar(100)) + ') exceeds maximum number in sqlver.tblNumbers.' AS int)
+  END
+
+  --Make sure there is an EOL at the end
+  SET @SQL = @SQL + CHAR(13)
+
+  DECLARE @tvSQL TABLE (
+    Pos int PRIMARY KEY,
+    EndPos int,
+    ThisChar nchar,  
+    StartQIdent bit DEFAULT (0),  
+    StartVar bit DEFAULT (0),
+    StartLit bit DEFAULT (0),
+    StartCom1 bit DEFAULT (0),
+    StartCom2 bit DEFAULT (0),
+    IsWhite bit DEFAULT (0),
+    IsOper  bit DEFAULT (0),
+    IsComment bit DEFAULT (0),
+    IsEOL bit DEFAULT (0)
+  )
+
+  INSERT INTO @tvSQL (
+    Pos,
+    ThisChar
+  )
+  SELECT
+    n.Number,
+    SUBSTRING(@SQL, n.Number, 1)
+  FROM
+    sqlver.tblNumbers n
+  WHERE
+    n.Number <= LEN(@SQL + 'x') - 1
+    
+    
+  UPDATE t1
+    SET 
+      StartQIdent = CASE WHEN t_qident.Pos IS NOT NULL THEN 1 ELSE 0 END,
+      StartVar = CASE WHEN t_var.Pos IS NOT NULL THEN 1 ELSE 0 END,
+      StartCom1 = CASE WHEN t_com1.Pos IS NOT NULL THEN 1 ELSE 0 END,
+      StartCom2 = CASE WHEN t_com2.Pos IS NOT NULL THEN 1 ELSE 0 END,
+      IsWhite = CASE WHEN t_white.Pos IS NOT NULL THEN 1 ELSE 0 END,
+      IsOper = CASE WHEN t_oper.Pos IS NOT NULL THEN 1 ELSE 0 END,
+      IsEOL = CASE WHEN t_EOL.Pos IS NOT NULL THEN 1 ELSE 0 END,
+      EndPos = CASE WHEN t_qident.Pos IS NOT NULL THEN t_qident.EndPos END
+  FROM 
+    @tvSQL t1
+
+    LEFT JOIN @tvSQL t_var ON
+      t1.Pos = t_var.Pos AND
+      t1.ThisChar = '@'  
+
+    LEFT JOIN (
+      SELECT
+        t1.Pos,
+        MIN(t2.Pos) AS EndPos
+      FROM
+        @tvSQL t1  
+        LEFT JOIN @tvSQL t2 ON
+          t1.Pos < t2.Pos AND
+          t2.ThisChar = ']'    
+      WHERE
+        t1.ThisChar = '['
+      GROUP BY
+        t1.Pos
+      ) t_qident ON
+        t1.Pos = t_qident.Pos AND
+        t1.ThisChar = '['             
+    
+    LEFT JOIN (
+      SELECT
+        t1.Pos
+      FROM    
+        @tvSQL t1
+        JOIN @tvSQL t1a ON
+          t1.Pos + 1 = t1a.Pos AND
+          t1.ThisChar = '-' AND
+          t1a.ThisChar = '-'
+     ) t_com1 ON
+       t1.Pos = t_com1.Pos          
+            
+    LEFT JOIN (
+      SELECT
+        t1.Pos
+      FROM    
+        @tvSQL t1
+        JOIN @tvSQL t1a ON
+          t1.Pos + 1 = t1a.Pos AND
+          t1.ThisChar = '/' AND
+          t1a.ThisChar = '*'
+     ) t_com2 ON
+       t1.Pos = t_com2.Pos              
+           
+    LEFT JOIN @tvSQL t_white ON
+      t1.Pos = t_white.Pos AND    
+      t1.ThisChar IN (' ', CHAR(9), CHAR(10), CHAR(13))        
+      
+    LEFT JOIN @tvSQL t_oper ON
+      t1.Pos = t_oper.Pos AND
+      (
+       (t1.ThisChar IN ('+', '*', '=', '.', ';', '(', ')')) OR
+       (t1.ThisChar = '-' AND t_com1.Pos IS NULL) OR
+       (t1.ThisChar = '/' AND t_com2.Pos IS NULL)
+      )
+    
+    LEFT JOIN @tvSQL t_EOL ON
+      t1.Pos = t_EOL.Pos AND
+      t1.ThisChar IN (';', CHAR(13), CHAR(10))
+       
+      
+  UPDATE @tvSQL
+  SET EndPos = Pos + PATINDEX('%[' + CHAR(13) + CHAR(10) + ']%', RIGHT(@SQL, LEN(@SQL + 'x') - 1 - Pos - 1 - 1)) + 2
+  WHERE
+    StartCom1 = 1
+    
+  UPDATE @tvSQL
+  SET EndPos = Pos + PATINDEX('%*/%', RIGHT(@SQL, LEN(@SQL + 'x') - 1 - Pos - 1)) + 2
+  WHERE
+    StartCom2 = 1
+    
+  UPDATE t2
+  SET IsComment = 1
+  FROM
+    @tvSQL t1
+    JOIN @tvSQL t2 ON
+      t2.Pos >= t1.Pos AND
+      t2.Pos <= t1.EndPos    
+  WHERE
+    (t1.StartCom1 = 1 OR t1.StartCom2 = 1)
+   
+
+  DECLARE @Buf nvarchar(MAX)
+
+  SET @Buf = ''
+
+  SELECT @Buf = @Buf + t1.ThisChar
+  FROM
+    @tvSQL t1
+  WHERE
+    IsComment = 0
+
+  --Remove EOL that we added at the end  
+  RETURN LEFT(@Buf, LEN(@Buf + 'x') - 1)  
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfSubstrToDelims]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfSubstrToDelims]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfSubstrToDelims](
+@Str nvarchar(MAX),
+@StartAt int,
+@Delims nvarchar(MAX)
+)
+RETURNS nvarchar(MAX)
+--$!SQLVer Nov  7 2020  5:10AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  DECLARE @Result nvarchar(MAX)
+
+  IF @Delims = '\eol' BEGIN
+    SET @Delims = ';' + CHAR(13) + CHAR(10) + CHAR(9)
+  END
+
+  DECLARE @P int
+
+  SET @P = LEN(ISNULL(@Str, '') + 'x') - 1
+
+  IF @StartAt > 0 BEGIN
+    SET @P = @P - @StartAt + 1
+  END
+
+  IF @P > 0 BEGIN
+    SET @Result = RIGHT(@Str, @P)
+  END
+  ELSE BEGIN
+    SET @Result = @Str
+  END
+
+  SET @P = PATINDEX('%[' + @Delims + ']%', @Result)
+
+  IF @P > 0 BEGIN
+    SET @Result = LEFT(@Result, @P - 1)
+  END
+
+  RETURN @Result
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udftGetParsedValues]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udftGetParsedValues]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udftGetParsedValues](
+  @InputString nvarchar(MAX),
+  @Delimiter nchar(1)
+)
+RETURNS @tvValues TABLE (
+  [Value] nvarchar(MAX),
+  [Index] int)
+
+WITH EXECUTE AS OWNER
+--$!SQLVer Nov  7 2020  5:09AM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+
+  DECLARE @L int
+  SET @L = LEN(@InputString)
+  IF @L > ISNULL((SELECT MAX(Number) FROM sqlver.tblNumbers), NULL) BEGIN
+    INSERT INTO @tvValues ([Value], [Index])
+    VALUES ('Error in sqlver.udftGetParsedValues:  String length (' + CAST(@L AS varchar(100)) + ') exceeds maximum number in sqlver.tblNumbers.', -1)
+  END
+
+  --Remove trailing delimiters
+  WHILE RIGHT(@InputString,1) = @Delimiter BEGIN
+    SET @InputString = LEFT(@InputString, LEN(@InputString + 'x') - 1 - 1)
+  END
+  SET @InputString = @Delimiter + @InputString + @Delimiter
+
+  INSERT INTO @tvValues ([Value], [Index])
+  SELECT
+    SUBSTRING(
+      @InputString,
+      N.Number + 1, 
+      CHARINDEX( @Delimiter, @InputString, N.Number + 1 ) - N.Number - 1
+    ),
+
+    ROW_NUMBER() OVER (ORDER BY N.Number)
+
+  FROM sqlver.tblNumbers N
+  WHERE
+    SUBSTRING(@InputString, N.Number, 1 ) = @Delimiter AND
+    N.Number < (LEN(@InputString + 'x' ) - 1)
+  RETURN
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[tblSchemaLog]') IS NULL BEGIN
+CREATE TABLE [sqlver].[tblSchemaLog](
+	[SchemaLogId] [int] IDENTITY(1,1) NOT NULL,
+	[SPID] [smallint] NULL,
+	[EventType] [varchar](50) NULL,
+	[ObjectName] [sysname] NOT NULL,
+	[SchemaName] [sysname] NOT NULL,
+	[DatabaseName] [sysname] NOT NULL,
+	[ObjectType] [varchar](25) NULL,
+	[SQLCommand] [nvarchar](MAX) NULL,
+	[EventDate] [datetime] NULL,
+	[LoginName] [sysname] NOT NULL,
+	[EventData] [xml] NULL,
+	[Hash] [varbinary](128) NULL,
+	[Comments] [nvarchar](MAX) NULL,
+	[UserID] [int] NULL,
+	[SQLFullTable] [nvarchar](MAX) NULL,
+	CONSTRAINT [pkSchemaLog] PRIMARY KEY CLUSTERED
+(
+  [SchemaLogId] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+CREATE NONCLUSTERED INDEX ixSchemaLog_ObjectName_SchemaName ON [sqlver].[tblSchemaLog]
+(
+  [ObjectName] ASC,   [SchemaName] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+
+END
+
+      ELSE BEGIN
+      PRINT 'WARNING:  Table [sqlver].[tblSchemaLog] already exists.'
+      PRINT 'It would be best if you can drop this table and then re-execute this script to re-create it.'
+      PRINT '   DROP TABLE [sqlver].[tblSchemaLog]'
+      PRINT 'If you do not drop this table, you may need to alter it manually.'
+      PRINT 'New:'
+      PRINT '>>>>'
+      PRINT 'CREATE TABLE [sqlver].[tblSchemaLog](
+	[SchemaLogId] [int] IDENTITY(1,1) NOT NULL,
+	[SPID] [smallint] NULL,
+	[EventType] [varchar](50) NULL,
+	[ObjectName] [sysname] NOT NULL,
+	[SchemaName] [sysname] NOT NULL,
+	[DatabaseName] [sysname] NOT NULL,
+	[ObjectType] [varchar](25) NULL,
+	[SQLCommand] [nvarchar](MAX) NULL,
+	[EventDate] [datetime] NULL,
+	[LoginName] [sysname] NOT NULL,
+	[EventData] [xml] NULL,
+	[Hash] [varbinary](128) NULL,
+	[Comments] [nvarchar](MAX) NULL,
+	[UserID] [int] NULL,
+	[SQLFullTable] [nvarchar](MAX) NULL,
+	CONSTRAINT [pkSchemaLog] PRIMARY KEY CLUSTERED
+(
+  [SchemaLogId] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+CREATE NONCLUSTERED INDEX ixSchemaLog_ObjectName_SchemaName ON [sqlver].[tblSchemaLog]
+(
+  [ObjectName] ASC,   [SchemaName] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+'
+      PRINT '<<<<'
+      PRINT ''
+      PRINT 'Existing: '
+      PRINT '>>>>'
+      PRINT sqlver.udfScriptTable('[sqlver].[tblSchemaLog]', NULL)
+      PRINT '<<<<'
+      PRINT ''
+      END
+GO
+
+
+IF OBJECT_ID('[sqlver].[tblSchemaManifest]') IS NULL BEGIN
+CREATE TABLE [sqlver].[tblSchemaManifest](
+	[SchemaManifestId] [int] IDENTITY(1,1) NOT NULL,
+	[ObjectName] [sysname] NOT NULL,
+	[SchemaName] [sysname] NOT NULL,
+	[DatabaseName] [sysname] NOT NULL,
+	[OrigDefinition] [nvarchar](MAX) NULL,
+	[DateAppeared] [datetime] NULL,
+	[CreatedByLoginName] [sysname] NULL,
+	[DateUpdated] [datetime] NULL,
+	[OrigHash] [varbinary](128) NULL,
+	[CurrentHash] [varbinary](128) NULL,
+	[IsEncrypted] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__IsEncrypted] DEFAULT ((0)),
+	[StillExists] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__StillExists] DEFAULT ((0)),
+	[SkipLogging] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__SkipLogging] DEFAULT ((0)),
+	[Comments] [nvarchar](MAX) NULL,
+	[ObjectType] [sysname] NULL,
+	[IsGenerated] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__IsGenerated] DEFAULT ((0)),
+	[IsUserDefined] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__IsUserDefined] DEFAULT ((0)),
+	[HasError] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__HasError] DEFAULT ((0)),
+	[ErrorMessage] [varchar](MAX) NULL,
+	[UpdateAvail] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__UpdateAvail] DEFAULT ((0)),
+	[UpdateHash] [varbinary](128) NULL,
+	[UpdateDefinition] [nvarchar](MAX) NULL,
+	[InhibitUpdate] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__InhibitUpdate] DEFAULT ((0)),
+	[UpdateBatchGUID] [uniqueidentifier] NULL,
+	[IncludeInQueryBuilder] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__IncludeInQueryBuilder] DEFAULT ((0)),
+	[ColumnDefinition] [nvarchar](MAX) NULL,
+	[ExecuteAs] [sysname] NULL,
+	[WriteProtected] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__WriteProtected] DEFAULT ((0)),
+	[ForceSchemaBinding] [bit] NULL,
+	[ObjectCategory] [int] NULL,
+	[ExcludeFromSync] [bit] NULL,
+	CONSTRAINT [pkSchemaManifest] PRIMARY KEY CLUSTERED
+(
+  [SchemaManifestId] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+CREATE NONCLUSTERED INDEX ixixSchemaManifest_ObjectName_SchemaName ON [sqlver].[tblSchemaManifest]
+(
+  [ObjectName] ASC,   [SchemaName] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+
+CREATE NONCLUSTERED INDEX ixixSchemaManifest_SchemaName_StillExists ON [sqlver].[tblSchemaManifest]
+(
+  [SchemaName] ASC,   [StillExists] ASC
+) INCLUDE
+(
+  [SchemaManifestId],   [ObjectName],   [ObjectType])WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+
+CREATE NONCLUSTERED INDEX ixixSchemaManifest_StillExists_ObjectType ON [sqlver].[tblSchemaManifest]
+(
+  [StillExists] ASC,   [ObjectType] ASC
+) INCLUDE
+(
+  [SchemaManifestId],   [ObjectName],   [SchemaName])WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+
+CREATE NONCLUSTERED INDEX ixSchemaManifest_ObjectName_StillExists_ObjectType ON [sqlver].[tblSchemaManifest]
+(
+  [ObjectName] ASC,   [StillExists] ASC,   [ObjectType] ASC
+) INCLUDE
+(
+  [SchemaManifestId],   [SchemaName])WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+
+END
+
+      ELSE BEGIN
+      PRINT 'WARNING:  Table [sqlver].[tblSchemaManifest] already exists.'
+      PRINT 'It would be best if you can drop this table and then re-execute this script to re-create it.'
+      PRINT '   DROP TABLE [sqlver].[tblSchemaManifest]'
+      PRINT 'If you do not drop this table, you may need to alter it manually.'
+      PRINT 'New:'
+      PRINT '>>>>'
+      PRINT 'CREATE TABLE [sqlver].[tblSchemaManifest](
+	[SchemaManifestId] [int] IDENTITY(1,1) NOT NULL,
+	[ObjectName] [sysname] NOT NULL,
+	[SchemaName] [sysname] NOT NULL,
+	[DatabaseName] [sysname] NOT NULL,
+	[OrigDefinition] [nvarchar](MAX) NULL,
+	[DateAppeared] [datetime] NULL,
+	[CreatedByLoginName] [sysname] NULL,
+	[DateUpdated] [datetime] NULL,
+	[OrigHash] [varbinary](128) NULL,
+	[CurrentHash] [varbinary](128) NULL,
+	[IsEncrypted] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__IsEncrypted] DEFAULT ((0)),
+	[StillExists] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__StillExists] DEFAULT ((0)),
+	[SkipLogging] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__SkipLogging] DEFAULT ((0)),
+	[Comments] [nvarchar](MAX) NULL,
+	[ObjectType] [sysname] NULL,
+	[IsGenerated] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__IsGenerated] DEFAULT ((0)),
+	[IsUserDefined] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__IsUserDefined] DEFAULT ((0)),
+	[HasError] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__HasError] DEFAULT ((0)),
+	[ErrorMessage] [varchar](MAX) NULL,
+	[UpdateAvail] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__UpdateAvail] DEFAULT ((0)),
+	[UpdateHash] [varbinary](128) NULL,
+	[UpdateDefinition] [nvarchar](MAX) NULL,
+	[InhibitUpdate] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__InhibitUpdate] DEFAULT ((0)),
+	[UpdateBatchGUID] [uniqueidentifier] NULL,
+	[IncludeInQueryBuilder] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__IncludeInQueryBuilder] DEFAULT ((0)),
+	[ColumnDefinition] [nvarchar](MAX) NULL,
+	[ExecuteAs] [sysname] NULL,
+	[WriteProtected] [bit] NOT NULL CONSTRAINT [dfSchemaManifest__WriteProtected] DEFAULT ((0)),
+	[ForceSchemaBinding] [bit] NULL,
+	[ObjectCategory] [int] NULL,
+	[ExcludeFromSync] [bit] NULL,
+	CONSTRAINT [pkSchemaManifest] PRIMARY KEY CLUSTERED
+(
+  [SchemaManifestId] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+CREATE NONCLUSTERED INDEX ixixSchemaManifest_ObjectName_SchemaName ON [sqlver].[tblSchemaManifest]
+(
+  [ObjectName] ASC,   [SchemaName] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+
+CREATE NONCLUSTERED INDEX ixixSchemaManifest_SchemaName_StillExists ON [sqlver].[tblSchemaManifest]
+(
+  [SchemaName] ASC,   [StillExists] ASC
+) INCLUDE
+(
+  [SchemaManifestId],   [ObjectName],   [ObjectType])WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+
+CREATE NONCLUSTERED INDEX ixixSchemaManifest_StillExists_ObjectType ON [sqlver].[tblSchemaManifest]
+(
+  [StillExists] ASC,   [ObjectType] ASC
+) INCLUDE
+(
+  [SchemaManifestId],   [ObjectName],   [SchemaName])WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+
+CREATE NONCLUSTERED INDEX ixSchemaManifest_ObjectName_StillExists_ObjectType ON [sqlver].[tblSchemaManifest]
+(
+  [ObjectName] ASC,   [StillExists] ASC,   [ObjectType] ASC
+) INCLUDE
+(
+  [SchemaManifestId],   [SchemaName])WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+'
+      PRINT '<<<<'
+      PRINT ''
+      PRINT 'Existing: '
+      PRINT '>>>>'
+      PRINT sqlver.udfScriptTable('[sqlver].[tblSchemaManifest]', NULL)
+      PRINT '<<<<'
+      PRINT ''
+      END
+GO
+
+
+IF OBJECT_ID('[sqlver].[spsysSchemaExistSync]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spsysSchemaExistSync]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spsysSchemaExistSync]
+--$!SQLVer Nov  7 2020  5:09AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  --Flag missing objects
+  UPDATE schm
+  SET
+    StillExists = 0
+  FROM
+    sqlver.tblSchemaManifest schm 
+    LEFT JOIN sys.schemas sch ON
+      schm.SchemaName = sch.name 
+    LEFT JOIN sys.objects obj ON
+      sch.schema_id = obj.schema_id AND
+      schm.ObjectName = obj.name
+
+  WHERE
+    schm.ObjectType NOT IN ('SYNONYM', 'TRIGGER', 'TYPE') AND
+    schm.StillExists = 1 AND
+    obj.object_id IS NULL
+
+  UPDATE schm
+  SET
+    StillExists = 0
+  FROM
+    sqlver.tblSchemaManifest schm 
+
+    LEFT JOIN sys.schemas sch ON
+      schm.SchemaName = sch.name 
+    LEFT JOIN sys.synonyms syn ON
+      schm.ObjectName = syn.name AND
+      sch.schema_id = syn.schema_id
+  WHERE
+    schm.ObjectType = 'SYNONYM' AND
+    schm.StillExists = 1 AND
+    syn.object_id IS NULL
+
+
+  UPDATE schm
+  SET
+    StillExists = 0
+  FROM
+    sqlver.tblSchemaManifest schm 
+
+    LEFT JOIN sys.schemas sch ON
+      schm.SchemaName = sch.name 
+    LEFT JOIN sys.types typ ON
+      schm.ObjectName = typ.name AND
+      sch.schema_id = typ.schema_id
+  WHERE
+    schm.ObjectType = 'TYPE' AND
+    schm.StillExists = 1 AND
+    typ.user_type_id IS NULL
+
+
+  UPDATE schm
+  SET
+    StillExists = 0
+  FROM
+    sqlver.tblSchemaManifest schm 
+
+    LEFT JOIN sys.schemas sch ON
+      schm.SchemaName = sch.name 
+    LEFT JOIN sys.triggers tg ON
+      schm.ObjectName = tg.name
+    LEFT JOIN sys.objects obj ON
+      sch.schema_id = obj.schema_id AND
+      tg.object_id = obj.object_id
+
+  WHERE
+    schm.ObjectType = 'TRIGGER' AND
+    schm.StillExists = 1 AND
+    (tg.object_id IS NULL OR (tg.parent_class <> 0 AND obj.object_id IS NULL))
+
+
+
+  --Flag present objects
+  UPDATE schm
+  SET
+    StillExists = 1
+  FROM
+    sqlver.tblSchemaManifest schm 
+    LEFT JOIN sys.schemas sch ON
+      schm.SchemaName = sch.name 
+    LEFT JOIN sys.objects obj ON
+      sch.schema_id = obj.schema_id AND
+      schm.ObjectName = obj.name
+
+  WHERE
+    schm.ObjectType NOT IN ('SYNONYM', 'TRIGGER','TYPE') AND
+    schm.StillExists = 0 AND
+    obj.object_id IS NOT NULL
+
+
+  UPDATE schm
+  SET
+    StillExists = 1
+  FROM
+    sqlver.tblSchemaManifest schm 
+
+    LEFT JOIN sys.schemas sch ON
+      schm.SchemaName = sch.name 
+    LEFT JOIN sys.synonyms syn ON
+      schm.ObjectName = syn.name AND
+      sch.schema_id = syn.schema_id
+  WHERE
+    schm.ObjectType = 'SYNONYM' AND
+    schm.StillExists = 0 AND
+    syn.object_id IS NOT NULL
+
+
+  UPDATE schm
+  SET
+    StillExists = 1
+  FROM
+    sqlver.tblSchemaManifest schm 
+
+    LEFT JOIN sys.schemas sch ON
+      schm.SchemaName = sch.name 
+    LEFT JOIN sys.types typ ON
+      schm.ObjectName = typ.name AND
+      sch.schema_id = typ.schema_id
+  WHERE
+    schm.ObjectType = 'TYPE' AND
+    schm.StillExists = 0 AND
+    typ.user_type_id IS NOT NULL
+
+  UPDATE schm
+  SET
+    StillExists = 1
+  FROM
+    sqlver.tblSchemaManifest schm 
+
+    LEFT JOIN sys.schemas sch ON
+      schm.SchemaName = sch.name 
+    LEFT JOIN sys.triggers tg ON
+      schm.ObjectName = tg.name
+    LEFT JOIN sys.objects obj ON
+      sch.schema_id = obj.schema_id AND
+      tg.object_id = obj.object_id
+
+  WHERE
+    schm.ObjectType = 'TRIGGER' AND
+    schm.StillExists = 0 AND
+    tg.object_id IS NOT NULL AND (tg.parent_class = 0 OR obj.object_id IS NOT NULL)
+
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spusrSchemaObjectCategorize]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spusrSchemaObjectCategorize]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spusrSchemaObjectCategorize]
+@ObjectManifestId int = NULL
+--$!SQLVer Nov  7 2020  5:09AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  /*
+  If this procedure exists, it is called by the dtgSQLVerLogSchemaChange
+  to categorize objects.
+
+  It may also be called manually.
+
+  Modify this procedure as needed to set sqlver.tblSchemaManifest.ObjectCategory
+  as you see fit.
+
+  Object categories can be passed as a comma-separated list into @ObjectCategories
+  when calling sqlver.spsysSchemaVersionUpdateFromMaster... to indicate which
+  categories of objects should be updated.
+  */
+
+  UPDATE schm
+  SET
+      ObjectCategory = 
+      CASE
+        WHEN
+          (
+            schm.SchemaName = 'opsstream' AND
+
+            (
+              schm.ObjectName = 'vwQXDLabelUsers'
+
+              OR
+              (
+                PATINDEX('%$$%', schm.ObjectName) = 0 AND
+
+                (
+                PATINDEX('%QXD[_]%', schm.ObjectName) > 0 OR
+                PATINDEX('%tblQXDH[_]%', schm.ObjectName) > 0 OR
+                PATINDEX('%QXDix[_]%', schm.ObjectName) > 0 OR
+                PATINDEX('%QXDixnuq[_]%', schm.ObjectName) > 0 OR          
+                PATINDEX('%QXDLabel[_]%', schm.ObjectName) > 0
+                ) AND
+
+                (
+                x.ParentObject LIKE 'tblQXD%' OR
+                x.ParentObject LIKE 'tblQXDH[_]%' OR 
+                x.ParentObject LIKE 'vwQXD%' OR
+                x.ParentObject LIKE 'spgetQXD%' OR
+                x.ParentObject LIKE 'spinsQXD%' OR
+                x.ParentObject LIKE 'spupdQXD%' OR
+                x.ParentObject LIKE 'spdelQXD%' OR
+                x.ParentObject LIKE 'vwQXDLabel%' OR
+                x.ParentObject LIKE 'vwQXDix%'
+                )
+              )
+            )
+          )
+          THEN 1001
+        WHEN schm.ObjectName = 'dtgSQLVerLogSchemaChanges' AND NULLIF(RTRIM(SchemaName), '') IS NULL THEN 1003
+        WHEN schm.SchemaName = 'opsstream' THEN 1000
+        WHEN schm.SchemaName = 'opsusr' THEN 1002
+        WHEN schm.SchemaName = 'sqlver' THEN 1003
+        WHEN schm.SchemaName IN ('geonames', 'sdom', 'sws', 'theas') THEN 1004
+        ELSE 0        
+      END
+  FROM
+    sqlver.tblSchemaManifest schm
+    JOIN (
+      SELECT
+        schm.SchemaManifestID,
+        COALESCE(sch.name, schm.SchemaName) AS ParentSchema,
+        COALESCE(obj.name, schm.ObjectName) AS ParentObject
+      FROM
+        sqlver.tblSchemaManifest schm
+
+        LEFT JOIN sys.triggers tg ON
+          schm.ObjectName = tg.name 
+        LEFT JOIN sys.schemas sch ON
+          schm.SchemaName = sch.name
+        LEFT JOIN sys.objects obj ON
+          tg.parent_id = obj.object_id AND
+          sch.schema_id = obj.schema_id
+      WHERE
+        (@ObjectManifestId IS NULL OR
+         schm.SchemaManifestID = @ObjectManifestId 
+        )
+      ) x ON
+        schm.SchemaManifestID = x.SchemaManifestID
+    WHERE
+      (@ObjectManifestId IS NULL OR
+       schm.SchemaManifestID = @ObjectManifestId
+      )
+
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spsysSchemaProcessObject]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spsysSchemaProcessObject]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spsysSchemaProcessObject]
+@SchemaName sysname = NULL,
+@ObjectName sysname = NULL,
+@EventData xml = NULL,
+@ForceSchemaBinding bit = NULL,
+@ForceExecuteAs bit = NULL,
+@SkipExec bit = 0
+AS
+BEGIN
+  --You may set @Debug = 1 to output verbose debugging messages from this trigger.
+  DECLARE @Debug bit
+  SET @Debug = 0
+
+  /*
+  DATABASE trigger to log DDL changes to sqlver.tblSchemaLog
+
+  1) Object will be added to sqlver.tblSchemaManifest if it does
+     not exist
+
+  2) WriteProtect and SkipLogging flags in sqlver.tblSchemaManifest
+     will be respected
+
+  3) Log entry will be added to sqlver.tblSchemaLog if applicable
+     and if hash is different from previous hash
+
+  4) Hash is always generated on the "CREATE xxx" version of the
+     the SQL statement, but the actual statement ("ALTER xxx" or
+     "CREATE xxx") is stored in sqlver.tblSchemaLog
+
+  5) If the object is a table or an index, the hash will be based
+     upon the full script for the CREATE TABLE, incluing all indexes.
+     This generated script will also be saved in:
+     sqlver.tblSchemaLog.SQLFullTable
+
+  5) May include a special block comment that starts with /ver
+
+     Such a comment will be stored in sqlver.tblSchemaLog but will be
+     stripped from the code prior to generating hash and storing
+     in sqlver.tblSchemaLog  (useful for version-specific change log
+     messages)
+
+     Only the first such comment in the code block will be logged.
+     If special comment is present but hash is unchanged, comment will
+     be appended to prior comment in prior log entry.  (Allows appending
+     a comment after the object has been updated)
+
+     Note that such a comment will cause the DDL statement (after stripping
+     the comment) to be executed
+
+     If this comment includes /manifest, the comment text prior to
+     /manifest will be logged to sqlver.tblSchemaLog but the subsequent
+     text will be saved to sqlver.tblSchemaManifest, overwriting any
+     value stored in sqlver.tblSchemaManifest.Comments  (useful for storing
+     object-level notes).  You may also manually update sqlver.tblSchemaManifest
+     if you like.
+
+  6) Alter this trigger to set @RequireVerComment = 1 to throw an error
+     if a /ver comment is not provided
+
+  7) Alter this trigger to set @Visible=false to disable output of
+     messages
+
+  8) If object is encrypted (WITH ENCRYPTION) the change will be logged,
+     but the actual code will be recorded as a new GUID (since the
+     code is not available due to encryption)
+
+  9) May insert a copyright message in @tvCopyrightMsgs, or multiple
+     messages--each for a specific schema name.  The applicable message
+     will be injected into the SQL statement.
+  
+  */
+  SET NOCOUNT ON
+
+  IF @EventData IS NULL AND OBJECT_ID(CONCAT(@SchemaName, '.', @ObjectName)) IS NULL BEGIN
+    RETURN  --Nothing to do. Exit
+  END
+
+  --Set @Visible = 1 to PRINT a SQLVer message each time an object is modified.
+  --SET @Visible = 0 to have SQLVer work without outputting PRINT messages
+
+  DECLARE @Visible bit
+  IF @@NESTLEVEL <= 2 BEGIN
+    --Running due to an interactive DDL command
+    SET @Visible = 1
+  END
+  ELSE BEGIN
+    --Running due to DDL from a stored procedure
+    SET @Visible = 0
+  END
+
+  IF @ForceSchemaBinding IS NOT NULL AND @SkipExec = 1 BEGIN
+    SET @SkipExec = 0
+  END
+
+  DECLARE @Nested bit
+  DECLARE @ChangeDetected bit
+
+  --Set @RequireVerComment to force each object change to include a logged version comment
+  DECLARE @RequireVerComment bit
+  SET @RequireVerComment = 0
+
+  DECLARE @tvCopyrightMsgs TABLE (
+    SchemaName sysname NULL,
+    CopyrightMsg nvarchar(MAX)
+  )
+
+  /*
+  Different schemas may need different copyright information added to comments in
+  each object.  You could create a table that contains these messages, but a this
+  point this trigger simply uses the hard-coded messages below.
+  */
+
+  INSERT INTO @tvCopyrightMsgs (SchemaName, CopyrightMsg)
+  VALUES
+    --Default message (specified with SchemaName = '*')
+    ('*', ''),
+
+    --Schema-specific messages
+    (
+    'sqlver',
+'--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)'
+    ),
+
+    (
+    'sdom',
+'--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqldom)'
+    ),
+
+    (
+    'theas',
+'--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/theas)'
+    ),
+
+    (
+    'sws',
+'--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --SWS (SQLWebShim) is a deprecated way of using SQL to generate HTML responses'
+    )
+
+  IF EXISTS(SELECT schema_id FROM sys.schemas WHERE name = 'opsstream') BEGIN
+    INSERT INTO @tvCopyrightMsgs (SchemaName, CopyrightMsg)
+    VALUES
+    (
+    'opsstream',
+'--©Copyright 2006-2019 by David Rueter, Automated Operations, Inc.
+--May be held, used or transmitted only pursuant to an in-force licensing agreement with Automated Operations, Inc.
+--Contact info@opsstream.com / 800-964-3646 / 949-264-1555'
+    )
+  END
+  --------------------------------------------------------------
+
+  DECLARE @Msg nvarchar(MAX)
+   
+  IF @Debug = 1 BEGIN
+    SET @Msg = 'sqlver.spSysSchemaProcessObject: Starting'
+    PRINT @Msg
+  END
+  
+  DECLARE @CRLF nvarchar(5)
+  SET @CRLF = NCHAR(13) + NCHAR(10)
+
+  BEGIN TRY
+    --retrieve trigger event data
+    --DECLARE @EventData xml
+    --SET @EventData = EVENTDATA()
+    
+
+    DECLARE @SkipLogging bit
+    DECLARE @IsEncrypted bit
+    
+    DECLARE @DatabaseName sysname
+    --DECLARE @SchemaName sysname
+    --DECLARE @ObjectName sysname
+    DECLARE @IndexName sysname
+    DECLARE @EventType varchar(50)
+    DECLARE @ObjectType varchar(25)
+    DECLARE @QualifiedName varchar(775)
+    DECLARE @ObjectId int
+    DECLARE @OrigSQLFromEvent nvarchar(MAX)
+    DECLARE @SQLFromEvent nvarchar(MAX)
+    DECLARE @SQLForHash nvarchar(MAX)
+    DECLARE @SQLStripped nvarchar(MAX)
+    
+    DECLARE @SPID smallint
+    DECLARE @LoginName sysname
+    DECLARE @EventDate datetime
+
+    DECLARE @LastSchemaLogId int
+    DECLARE @SchemaLogId int
+    
+    DECLARE @ManifestId int
+    DECLARE @OrigDefinitionIsNull int
+
+    DECLARE @CalculatedHash varbinary(128)
+    DECLARE @StoredHash varbinary(128)
+    DECLARE @StoredHashManifest varbinary(128)
+    DECLARE @WriteProtected bit
+    DECLARE @StoredExecuteAs sysname
+    DECLARE @ExistingObject bit
+    DECLARE @StoredSkipLogging bit
+    --DECLARE @ForceSchemaBinding bit
+
+
+    DECLARE @ThisComment nvarchar(MAX)    
+    DECLARE @ThisManifestComment nvarchar(MAX)
+    DECLARE @Comments nvarchar(MAX)
+    DECLARE @CommentAlreadyExists bit
+
+    
+    DECLARE @HasEmbeddedComment bit
+    SET @HasEmbeddedComment = 0
+    
+    DECLARE @NeedExec bit
+    SET @NeedExec = 0
+    
+    DECLARE @Buf nvarchar(MAX)
+    DECLARE @P int
+    DECLARE @P1 int
+    DECLARE @P2 int
+    DECLARE @PWithClause int
+    DECLARE @WithClause nvarchar(MAX)
+    DECLARE @PAs int
+    DECLARE @PMarker int
+    DECLARE @PMarker2 int
+
+    DECLARE @SVMarker nvarchar(MAX)
+    SET @SVMarker = '--$!' + 'SQLVer ' + ISNULL(CAST(GETDATE() AS varchar(100)), '') + ISNULL(' by ' + SYSTEM_USER, '') + @CRLF
+    
+    DECLARE @UserID int
+
+    SET @SkipLogging = 0
+
+    --Get OpsStream user, if applicable
+    IF OBJECT_ID('opsstream.vwSysCurUser') > 0 BEGIN
+      SELECT @UserID = UserID FROM opsstream.vwSysCurUser
+    END
+
+    IF @EventData IS NULL AND (@SchemaName IS NOT NULL OR @ObjectName IS NOT NULL) BEGIN
+      IF @Debug = 1 PRINT 'NOT using XML event data'
+
+      --Allow @SchemaName to contain schema.object or [schema].[object]
+      IF @ObjectName IS NULL BEGIN
+        SET @ObjectName = PARSENAME(@SchemaName, 1)
+        SET @SchemaName = PARSENAME(@SchemaName, 2)
+      END
+      ELSE BEGIN
+        SET @ObjectName = PARSENAME(@ObjectName, 1)
+        SET @SchemaName = PARSENAME(@SchemaName, 1)
+      END
+            
+      SET @DatabaseName = DB_NAME()
+
+      SET @SPID = @@SPID
+      SET @EventType = 'REPARSE'
+      SET @LoginName = SYSTEM_USER
+      SET @EventDate = GETDATE()
+
+      IF @ObjectName = 'dtgSQLVerLogSchemaChanges' AND NULLIF(RTRIM(@SchemaName), '') IS NULL BEGIN
+        SELECT
+          @SchemaName = '',
+          @ObjectId = tg.object_id,
+          @ObjectType = 'TRIGGER',
+          @SQLFromEvent = smod.[definition] 
+        FROM
+          sys.triggers tg
+          LEFT JOIN sys.sql_modules smod ON
+            tg.object_id = smod.object_id
+        WHERE
+          tg.name = @ObjectName AND
+          tg.parent_class = 0
+      END
+   
+      ELSE BEGIN
+        SET @ObjectId = NULL
+
+        --See if it is a synonym
+        SELECT
+          @ObjectId = syn.object_id,
+          @ObjectType = 'SYNONYM',
+          @SQLFromEvent = 'CREATE SYNONYM ' + '[' + sch.name + '].[' + syn.name + '] FOR ' + syn.base_object_name
+        FROM
+          sys.synonyms syn
+          JOIN sys.schemas sch ON
+            syn.schema_id = sch.schema_id
+        WHERE
+          sch.name = @SchemaName AND
+          syn.name = @ObjectName 
+
+        --See if it is a type
+        SELECT
+          @ObjectId = typ.system_type_id,
+          @ObjectType = 'TYPE',
+          @SQLFromEvent = sqlver.udfScriptType(@SchemaName, @ObjectName)
+        FROM
+          sys.types typ
+          JOIN sys.schemas sch ON
+            typ.schema_id = sch.schema_id
+        WHERE
+          sch.name = @SchemaName AND
+          typ.name = @ObjectName 
+
+        --Otherwise try to figure out the type
+        IF @ObjectId IS NULL BEGIN
+          SELECT
+            @ObjectId = obj.object_id,
+            @ObjectType = 
+              CASE obj.[Type]
+                WHEN 'FN' THEN 'FUNCTION' --  SQL_SCALAR_FUNCTION
+                --'FS',--  CLR_SCALAR_FUNCTION
+                --'FT',--  CLR_TABLE_VALUED_FUNCTION
+                WHEN 'IF' THEN 'FUNCTION'  --SQL_INLINE_TABLE_VALUED_FUNCTION
+                WHEN 'P' THEN 'PROCEDURE'  --SQL_STORED_PROCEDURE
+                --'PC',--  CLR_STORED_PROCEDURE
+                WHEN 'V' THEN 'VIEW'   --VIEW
+                WHEN 'TF' THEN 'FUNCTION' --SQL_TABLE_VALUED_FUNCTION
+                WHEN 'TR' THEN 'TRIGGER' --SQL_TRIGGER
+                WHEN 'U' THEN 'TABLE' -- USER_TABLE
+                WHEN 'SN' THEN 'SYNONYM' --SYNONYM           
+              END,
+            @SQLFromEvent = CASE WHEN obj.[Type] IN ('U') THEN sqlver.udfScriptTable(@SchemaName, @ObjectName) ELSE smod.[definition] END
+          FROM
+            sys.schemas sch
+            JOIN sys.objects obj ON
+              sch.schema_id = obj.schema_id
+            LEFT JOIN sys.sql_modules smod ON
+              obj.object_id = smod.object_id
+          WHERE
+            sch.name = @SchemaName AND
+            obj.name = @ObjectName AND
+            obj.type IN (
+              'FN',--  SQL_SCALAR_FUNCTION
+              --'FS',--  CLR_SCALAR_FUNCTION
+              --'FT',--  CLR_TABLE_VALUED_FUNCTION
+              'IF',--  SQL_INLINE_TABLE_VALUED_FUNCTION
+              'P', --   SQL_STORED_PROCEDURE
+              --'PC',--  CLR_STORED_PROCEDURE
+              'V', --   VIEW
+              'TF',--  SQL_TABLE_VALUED_FUNCTION
+              'TR', --SQL_TRIGGER
+              'U',  -- USER_TABLE
+              'SN' --SYNONYM
+            )
+        END
+      END
+    END
+    ELSE BEGIN
+
+      IF @Debug = 1 BEGIN
+        PRINT 'Getting values from event XML'
+      END
+
+      --grab values from event XML
+      SET @ObjectType = @EventData.value('(/EVENT_INSTANCE/ObjectType)[1]', 'varchar(25)')
+      SET @DatabaseName = @EventData.value('(/EVENT_INSTANCE/DatabaseName)[1]', 'sysname')
+      SET @SchemaName = @EventData.value('(/EVENT_INSTANCE/SchemaName)[1]', 'sysname')
+      SET @SPID = @EventData.value('(/EVENT_INSTANCE/SPID)[1]', 'smallint');
+    
+      SET @ObjectName = CASE
+                          WHEN @ObjectType = 'INDEX' THEN @EventData.value('(/EVENT_INSTANCE/TargetObjectName)[1]', 'sysname')
+                          ELSE @EventData.value('(/EVENT_INSTANCE/ObjectName)[1]', 'sysname')
+                        END
+
+      IF @ObjectType = 'INDEX' BEGIN
+        SET @IndexName = @EventData.value('(/EVENT_INSTANCE/ObjectName)[1]', 'sysname')
+      END
+
+      SET @EventType = @EventData.value('(/EVENT_INSTANCE/EventType)[1]', 'varchar(50)')
+      SET @LoginName = @EventData.value('(/EVENT_INSTANCE/LoginName)[1]', 'sysname')
+      SET @EventDate = COALESCE(@EventData.value('(/EVENT_INSTANCE/PostTime)[1]', 'datetime'), GETDATE())
+    
+      SET @SQLFromEvent = @EventData.value('(/EVENT_INSTANCE/TSQLCommand)[1]', 'nvarchar(MAX)')
+
+      SET @QualifiedName = QUOTENAME(@DatabaseName) + '.' + QUOTENAME(@SchemaName) + '.' + QUOTENAME(@ObjectName)
+      SET @ObjectId = OBJECT_ID(@QualifiedName) 
+    
+
+      IF @Debug = 1 BEGIN
+        PRINT 'Done getting values from event XML'
+      END
+
+    END
+
+
+
+    SET @QualifiedName = QUOTENAME(@DatabaseName) + '.' + QUOTENAME(@SchemaName) + '.' + QUOTENAME(@ObjectName)  
+
+    --Switch ALTER to CREATE for hash
+    --Find the first ALTER that is in uncommented SQL code
+
+    SET @P = sqlver.udfFindInSQL('ALTER', @SQLFromEvent, 0)
+    SET @P2 = sqlver.udfFindInSQL('CREATE', @SQLFromEvent, 0)
+
+    IF @P > 0 AND (NULLIF(@P2, 0) IS NULL OR @P2 > @P) BEGIN
+      SET @SQLFromEvent = STUFF(@SQLFromEvent, @P, LEN('ALTER'), 'CREATE')
+    END
+
+    --fetch appropriate copyright message
+    DECLARE @CopyrightMsg nvarchar(MAX)
+
+    SELECT
+      @CopyrightMsg = cm.CopyrightMsg
+    FROM
+      @tvCopyrightMsgs cm
+    WHERE
+      cm.SchemaName = @SchemaName 
+
+    IF @CopyrightMsg IS NULL BEGIN
+      --Get default message
+      SELECT
+      @CopyrightMsg = cm.CopyrightMsg
+    FROM
+      @tvCopyrightMsgs cm
+    WHERE
+      cm.SchemaName = '*'
+    END
+
+
+    SET @CopyrightMsg = ISNULL(NULLIF(sqlver.udfRTRIMSuper(@CopyrightMsg), '') + @CRLF, '') + 
+      '--Note: Comments after $!' + 'SQLVer and before AS are subject to automatic removal'
+
+    /*
+    We need to manipulate this SQL statement.  Certain things should
+    be excluded from the hash calculation, certain things (like
+    WITH SCHEMABINDING) may need to be added or removed, and certain
+    things should be consistently added to comments.
+      1) Strip out the WITH clause that occurs before the AS
+         before calculating the hash.  (Other WITH clauses, such
+         as CTEs should not be affected)
+         , but include WITH before executing
+      2) Add in generated WITH clause as needed
+      3) Remove existing comments that occur before the AS
+      4) Add in copyright message in comment before the AS
+      5) Change ALTER to CREATE for the hash calculation
+      6) Change CREATE to ALTER for the actual updating of the
+         object's code
+
+    Finding the right 'AS' and the right 'WITH' is tricky, as these can
+    occur in multiple places.  Once we find these, we replace them with
+    temporary tokens of '{{!' + 'AS!}}' and '{{!' + 'WITH!}}' to make it easier to
+    perform the required string manipulation.  Then these temporary tokens
+    are replaced with AS and WITH prior to executing the ALTER SQL.
+    
+    NOTE:  Whenver these temporary tokens are embedded as string literals
+    here in this code, we "escape" then as '{{!' + 'AS!}}' so that this
+    code does not self-modify itself in a bad way!
+    */
+
+    --Trim leading and trailing whitespace
+    SET @SQLFromEvent = sqlver.udfLTRIMSuper(sqlver.udfRTRIMSuper(@SQLFromEvent))
+    SET @OrigSQLFromEvent = @SQLFromEvent
+
+    --Search the SQL code to find WITH clause.  We are looking for the first
+    --WITH that occurs in uncommented SQL code...but we realize that such
+    --a WITH may occur after AS...in which case it is a false-positive that
+    --should be ignored.  We will make that determination later
+    SET @PWithClause = sqlver.udfFindInSQL('WITH', @SQLFromEvent, 0)
+
+    --If we found a WITH, assume that the WITH clause is on a single line.
+    --This is a SQLVer limitation:  a module-level WITH (i.e. WITH before the AS)
+    --MUST be confined to a single line.
+    IF @PWithClause > 0 BEGIN
+      SET @WithClause = sqlver.udfSubstrToDelims(@SQLFromEvent, @PWithClause, '\eol')
+    END
+
+    --Search the SQL code to find the first AS in uncomment code
+    SET @PAs = sqlver.udfFindInSQL('AS', @SQLFromEvent, 0)
+    IF @PAs >= @PWithClause AND @PAs < @PWithClause + LEN(@WithClause) BEGIN
+      --an AS in the WITH clause (such as WITH EXECUTE AS OWNER) does not count
+      SET @PAs = sqlver.udfFindInSQL('AS', @SQLFromEvent, @PWithClause + LEN(@WithClause) - 1)
+    END
+
+    --Ignore the WITH clause if it comes after the AS
+    IF @PWithClause > @PAs BEGIN
+      --WITH clause is a false-positive, such as a WITH in a CTE
+      SET @PWithClause = NULL
+      SET @WithClause = NULL
+    END
+
+    DECLARE @BeforeAs nvarchar(MAX)
+
+    --If we found an AS, perform the string manipulation
+    IF @PAs > 0 BEGIN
+
+      SET @SQLFromEvent = sqlver.udfRTRIMSuper(LEFT(@SQLFromEvent, @PAs -1)) +  '{{!' + 'AS!}}' + @CRLF +
+        sqlver.udfLTRIMSuper(RIGHT(@SQLFromEvent, LEN(@SQLFromEvent) - @PAs + 1 - 2))
+
+      SET @PAs = PATINDEX('%{{!' + 'AS!}}%', @SQLFromEvent)
+
+      --Gather all the code that occurs before the AS
+      SET @BeforeAs = sqlver.udfRTRIMSuper(LEFT(@SQLFromEvent, @PAs - 1))
+
+      --Note:  could perform modifidations on @BeforeAs here, such as to remove old-style strings
+      --IF @ObjectName <> 'sqlver.spSysSchemaProcessObject' BEGIN
+      --  SET @BeforeAs = REPLACE(@BeforeAs, @CopyrightMsg, '')
+      --END
+
+      SET @PMarker = PATINDEX('%--$!' + 'SQLVer%', @BeforeAs)
+
+      --handle old-style marker
+      SET @PMarker2 = NULLIF(PATINDEX('%--$!' + 'ParseMarker%', @BeforeAs), 0)
+      IF @PMarker2 < @PMarker BEGIN
+        SET @PMarker = @PMarker2
+      END
+
+      IF @PMarker > 0 BEGIN
+        --Replace with '{{!' + 'ParseMarker!}}'
+        SET @BeforeAs = sqlver.udfRTRIMSuper(LEFT(@BeforeAs, @PMarker - 1)) +
+          @CRLF + '{{!' + 'ParseMarker!}}' + 
+          ISNULL( 
+            NULLIF(
+              sqlver.udfRTRIMSuper(
+                sqlver.udfLTRIMSuper(
+                  sqlver.udfStripSQLCommentsExcept(
+                    SUBSTRING(@BeforeAs, @PMarker, LEN(@BeforeAs)),
+                    '$$'
+                  ) --strip all comments before the AS, EXCEPT for comments that start with $$
+                )
+              )
+            , '')
+            + @CRLF
+          , '')       
+      END
+      ELSE BEGIN
+        SET @BeforeAs = sqlver.udfRTRIMSuper(@BeforeAs) + @CRLF + '{{!' + 'ParseMarker!}}'
+      END
+
+      IF @PWithClause > 0 BEGIN
+        --We already found a WITH clause before AS above.  But now we need to find
+        --the position of the WITH within @BeforeAs, because comments and other whitespace
+        --has now been trimmed
+        SET @PWithClause = sqlver.udfFindInSQL('WITH', @BeforeAs, 0)
+        SET @WithClause = sqlver.udfSubstrToDelims(@BeforeAs, @PWithClause, '\eol')
+
+        --Replace the WITH with the temporary token '{{!' + 'WITH!}}'
+        DECLARE @AfterWith nvarchar(MAX)
+        SET @AfterWith = sqlver.udfLTRIMSuper(RIGHT(@BeforeAs, LEN(@BeforeAs + 'x') - 1 - (@PWithClause + LEN(@WithClause + 'x') - 1 ) + 1 ))         
+
+        SET @BeforeAs = sqlver.udfRTRIMSuper(LEFT(@BeforeAs, @PWithClause -1)) + @CRLF + 
+                        '{{!' + 'WITH!}}' +
+                         ISNULL(@AfterWith, '')
+      END
+   
+      --update @SQLFromEvent with the updated @BeforeAS
+      SET @SQLFromEvent = ISNULL(@BeforeAs, '') + RIGHT(@SQLFromEvent, LEN(@SQLFromEvent + 'x') - 1 - @PAs + 1)
+
+      --update the position of AS and WITH within the updated @SQLFromEvent string
+      SET @PAs = PATINDEX('%{{!' + 'AS!}}%', @SQLFromEvent)
+      SET @PWithClause = PATINDEX('%{{!' + 'WITH!}}%', @SQLFromEvent)
+
+    END
+
+    /*
+    SQLVer wants to allow SCHEMABINDING to be controlled by a
+    flag in sqlver.tblSchemaLog.
+
+    Note that if sqlver.tblSchemaManifest.ForceSchemaBinding is not null
+    the SCHEMABINDING may be changed from from what the original DDL
+    statement had.
+    */
+
+    --Determine if the DDL statement specifies WITH SCHEMABINDING
+    DECLARE @HasSchemabinding bit
+    SET @HasSchemabinding = 0
+    IF PATINDEX('%SCHEMABINDING%', @WithClause) > 0 BEGIN
+      SET @HasSchemabinding = 1
+    END
+
+    --WITH EXECUTE AS does not affect the version hash, but we
+    --do store this in sqlver.tblSchemaManifest, and we do warn
+    --if the DDL makes a change to this.
+    DECLARE @ExecuteAs sysname
+    SET @P = PATINDEX('%EXECUTE AS%', @WithClause)
+    IF @P > 0 BEGIN
+      SET @ExecuteAs = sqlver.udfLTRIMSuper(sqlver.udfRTRIMSuper(SUBSTRING(@WithClause, @P + LEN('EXECUTE AS'), LEN(@WithClause))))
+
+      SET @P2 = PATINDEX('%[; ,' + @CRLF + ']%', @ExecuteAs)
+
+      IF @P2 > 0 BEGIN
+        SET @ExecuteAs = LEFT(@ExecuteAs, @P2)
+      END
+      SET @ExecuteAs = sqlver.udfLTRIMSuper(sqlver.udfRTRIMSuper(@ExecuteAs))
+    END
+
+
+    --Retrieve manifest data
+    IF @Debug = 1 BEGIN
+      SET @Msg = 'sqlver.spSysSchemaProcessObject: Retrieving from sqlver.tblSchemaManifest'
+      PRINT @Msg
+    END
+  
+    SELECT
+      @ManifestId = m.SchemaManifestId,
+      @StoredHashManifest = m.CurrentHash,
+      @StoredSkipLogging = ISNULL(m.SkipLogging, 0),
+      @WriteProtected = ISNULL(m.WriteProtected, 0),
+      @StoredExecuteAs = NULLIF(RTRIM(m.ExecuteAs), ''),
+      @ForceSchemaBinding = COALESCE(@ForceSchemaBinding, m.ForceSchemaBinding),
+      @ForceExecuteAs = COALESCE(@ForceExecuteAs, CASE WHEN m.ExecuteAs LIKE '!%' THEN 1 ELSE 0 END), --!OWNER or !Caller means force
+      @ExistingObject = ISNULL(m.StillExists, 0),
+      @OrigDefinitionIsNull = CASE WHEN NULLIF(RTRIM(REPLACE(m.OrigDefinition, '--ENCRYPTED--', '')), '') IS NULL THEN 1 ELSE 0 END
+    FROM
+      sqlver.tblSchemaManifest m
+    WHERE
+      m.SchemaName = @SchemaName AND
+      m.ObjectName = @ObjectName
+
+      
+    IF @WriteProtected = 1 BEGIN
+      --sqlver.tblSchemamanifest.WriteProtected is set, so throw an
+      --error to roll back this modification
+      SET @Msg = 'Cannot modify ' + @DatabaseName + '.' + @SchemaName + '.' + @ObjectName + ' because object is flagged as write-protected by SQLVer.  See sqlver.tblSchemaManifest'  
+      RAISERROR(@Msg, 16, 1)
+      RETURN
+    END
+    
+    IF @Debug = 1 BEGIN
+      PRINT '@ObjectType=' + ISNULL(@ObjectType, 'NULL')
+    END
+
+    --Determine if we should skip the logging of this DDL change
+    IF @StoredSkipLogging = 1 BEGIN
+      SET @SkipLogging = @StoredSkipLogging
+    END
+    
+    IF @SQLFromEvent LIKE 'ALTER INDEX%' BEGIN
+      SET @P1 = sqlver.udfFindInSQL('REBUILD', @SQLFromEvent, 0)
+
+      IF @P1 > 0 AND @PWithClause > @P1 BEGIN
+        SET @SkipLogging = 1
+        --We don't want to log index rebuilds
+      END
+    END 
+    
+    --IF @ObjectType = 'TABLE' AND PATINDEX('%sqlver[_][_]reparse%', @SQLFromEvent) > 0 BEGIN
+    --  SET @SkipLogging = 1
+    --END                
+
+    SET @IsEncrypted = CASE WHEN @SQLFromEvent = '--ENCRYPTED--' THEN 1 ELSE 0 END
+    
+    IF @ObjectType IN ('TABLE', 'INDEX') BEGIN
+      --Retrieve the complete definition of the table
+      SET @SQLForHash = sqlver.udfScriptTable(@SchemaName, @ObjectName)
+    END
+
+    ELSE IF @IsEncrypted = 1 BEGIN
+      --We will assume that the DDL for the object is being updated.
+      --Since we can't calculate a hash on the actual statement, we'll calculate a
+      --hash on a new GUID to force a unique hash.  This way this event will
+      --be treated as a new update that needs to be logged.
+      SET @SQLForHash = CAST(NEWID() AS nvarchar(MAX))
+    END
+
+    ELSE BEGIN
+      SET @SQLStripped = @SQLFromEvent
+
+      DECLARE @IncludeMarker nvarchar(MAX)
+
+      DECLARE @PInclude int
+      DECLARE @PIncludeEnd int
+      DECLARE @ThisInclude nvarchar(MAX)
+      DECLARE @ThisIncludeExec nvarchar(MAX)
+      DECLARE @ThisIncludeResult nvarchar(MAX)
+
+    --xxxxxxxxxxxxxxxx
+
+    --@SQLStripped is ready, except for special SQLVer processing
+
+      IF ISNULL(@SchemaName, '') <> 'sqlver' AND
+        ISNULL(@ObjectName, '') <> 'spsysSchemaProcessObject' BEGIN
+
+        SET @IncludeMarker = '--$$SQLVer:Include:'
+
+        SET @PInclude = PATINDEX('%' + @IncludeMarker + '%', @SQLStripped)
+        
+        WHILE @PInclude > 0 BEGIN
+          BEGIN TRY
+            SET @NeedExec = 1
+            SET @ThisInclude = sqlver.udfSubstrToDelims(@SQLStripped, @PInclude, NCHAR(10)) + NCHAR(10)
+
+            SET @PIncludeEnd = 
+              ISNULL(
+              NULLIF(PATINDEX(
+                '%' + REPLACE(@ThisInclude, '$$', '$End') + '%',
+                SUBSTRING(@SQLStripped, @PInclude, LEN(@SQLStripped))
+              ), 0) +
+              LEN(REPLACE(@ThisInclude, '$$', '$End')) + LEN(@CRLF) -3, 0)
+
+            SET @ThisIncludeExec = REPLACE(@ThisInclude, @IncludeMarker, '')
+            EXEC sqlver.sputilResultSetAsStr @SQL = @ThisIncludeExec, @Result = @ThisIncludeResult OUTPUT
+
+            SET @ThisIncludeResult = 
+              REPLACE(@ThisInclude, '$$', '$!') +
+              ISNULL(@ThisIncludeResult, '') + @CRLF +
+              REPLACE(@ThisInclude, '$$', '$End')
+
+            IF @PIncludeEnd > 0 BEGIN
+              SET @SQLStripped = STUFF(@SQLStripped, @PInclude, @PIncludeEnd, @ThisIncludeResult)
+            END
+            ELSE BEGIN 
+              SET @SQLStripped = STUFF(@SQLStripped, @PInclude, LEN(@ThisInclude), @ThisIncludeResult)
+            END
+
+            SET @PInclude = PATINDEX('%' + @IncludeMarker + '%', @SQLStripped)
+          END TRY
+          BEGIN CATCH
+            PRINT 'sqlver.spSysSchemaProcessObject: Error processing $$SQLVer:Include (' + ISNULL(@ThisInclude, '') + ') ' + ERROR_MESSAGE()
+            SET @PInclude = 0
+          END CATCH
+        END
+
+        SET @SQLStripped = REPLACE(@SQLStripped,  REPLACE(@IncludeMarker, '$$', '$!'), @IncludeMarker) 
+
+      END
+
+    --xxxxxxxxxxxxxxxxxx
+
+      
+      /*
+      SQLVer looks for special block comments that begin with /ver
+
+      These special comments are designed to be version-specific
+      comments (such as for a change log).
+
+      For these special comments, we remove the comments from the code,
+      but store them in the table sqlver.tblSchemaLog
+      */
+
+      --Strip out special SQLVer comments
+      DECLARE @Marker nvarchar(10)
+      SET @Marker = '/*' + CHAR(47) + 'ver'
+
+      SET @P = PATINDEX('%' + @Marker + '%', @SQLStripped)
+
+      IF @P > 0 BEGIN      
+        DECLARE @SQLLen int
+
+        SET @SQLLen = LEN(@SQLStripped + 'x') - 1 
+        SET @Buf = RIGHT(@SQLStripped, @SQLLen - @P + 1 - LEN(@Marker))   
+
+        SET @P2 = PATINDEX('%*' + '/%', @Buf)
+        SET @Buf = LEFT(@Buf, @P2 - 1)
+        SET @ThisComment = ISNULL(NULLIF(RTRIM(@Buf), ''), '')
+
+        DECLARE @SQLBeforeComment nvarchar(MAX)
+        DECLARE @SQLAfterComment nvarchar(MAX)
+        SET @SQLBeforeComment = LEFT(@SQLStripped, @P - 1)
+        SET @SQLAfterComment = SUBSTRING(@SQLStripped, @P + LEN(@Marker) + LEN(@ThisComment + 'x') + LEN('/**/') - 1, LEN(@SQLStripped))
+
+        --Remove extraneous CRLF
+        IF RIGHT(@SQLBeforeComment, LEN(@CRLF + 'x') - 1) = @CRLF AND
+            LEFT(@SQLAfterComment, LEN(@CRLF + 'x') - 1) = @CRLF BEGIN
+          SET @SQLAfterComment = SUBSTRING(@SQLAfterComment, LEN(@CRLF + 'x') - 1 + 1, LEN(@SQLAfterComment))
+        END
+         
+
+        IF @Debug = 1 BEGIN
+          PRINT '>>>>@SQLBeforeComment:' + @SQLBeforeComment
+          PRINT '>>>>@SQLAfterComment:' + @SQLAfterComment
+        END
+
+        SET @SQLStripped = 
+              sqlver.udfRTRIMSuper(
+                @SQLBeforeComment +
+                @SQLAfterComment
+              )   
+
+        SET @ThisComment = sqlver.udfRTRIMSuper(sqlver.udfLTRIMSuper(@ThisComment))
+        SET @ThisComment = NULLIF(@ThisComment, '')
+
+      
+        /*
+        Within a special /ver comment, SQLVer looks for a special comment that
+        begins with /manifest.
+
+        This special comment is understood not to be version-specific, but
+        rather object-specific, to be stored in sqlver.tblObjectManifest.
+        
+        This comment is stripped out of the version-specific comment.
+        */
+
+        SET @P2 = PATINDEX('%/' + 'manifest%', @ThisComment)
+        IF @P2 > 0 BEGIN
+          SET @ThisManifestComment = sqlver.udfLTRIMSuper(RIGHT(@ThisComment, LEN(@ThisComment + 'x') - 1 - @P2 - LEN('/manifest')))
+          SET @ThisComment = sqlver.udfRTRIMSuper(LEFT(@ThisComment, @P2 -1))
+        END
+
+        IF @ThisComment IS NOT NULL BEGIN
+          SET @Comments = ISNULL(@Comments + ' | ', '') + @ThisComment
+
+          SET @HasEmbeddedComment = 1      
+        END
+      END
+
+      IF @RequireVerComment = 1 AND ISNULL(@HasEmbeddedComment, 0) = 0 BEGIN
+        SET @Msg = 'You must include a version comment regarding your changes.  Add a block comment that starts with /ver such as:' + @CRLF +
+        '/*' + CHAR(47) + 'ver' + @CRLF + 
+        'Changed xxx to because yyy.' + @CRLF +
+        '*/'
+        RAISERROR(@Msg, 16, 1)
+      END
+
+      --Now strip out WITH clause for hash
+      SET @SQLForHash = REPLACE(REPLACE(
+                          @SQLStripped, @CRLF + '{{!' + 'WITH!}}', ''),
+                          '{{!' + 'AS!}}', @CRLF + 'AS')
+
+    END    
+    
+
+    /*
+    We want the version hash to always be calculated on a CREATE
+    and never an ALTER.
+    
+    For example, if an object is created, then altered, then
+    altered again to remove the first changes, the resulting
+    hash should match the original hash from when the object
+    was created.
+    */
+
+    --Switch ALTER to CREATE for hash
+    --Find the first ALTER that is in uncommented SQL code
+    SET @P = sqlver.udfFindInSQL('ALTER', @SQLForHash, 0)
+    SET @P2 = sqlver.udfFindInSQL('CREATE', @SQLForHash, 0)
+
+    IF @P > 0 AND (NULLIF(@P2, 0) IS NULL OR @P2 > @P) BEGIN
+      SET @SQLForHash = sqlver.udfRTRIMSuper(sqlver.udfLTRIMSuper(LEFT(@SQLForHash, @P - 1) + 'CREATE' + RIGHT(@SQLForHash, LEN(@SQLForHash) - LEN('ALTER'))))
+    END
+
+    SELECT
+      @LastSchemaLogId = MAX(schl.SchemaLogId)
+    FROM
+      sqlver.tblSchemaLog schl
+    WHERE
+      schl.SchemaName = @SchemaName AND
+      schl.ObjectName = @ObjectName          
+ 
+  
+    IF @ObjectType NOT IN ('TABLE', 'INDEX', 'TYPE') AND
+        (@ThisComment IS NOT NULL OR
+        @ThisManifestComment IS NOT NULL OR
+        NULLIF(RTRIM(@CopyrightMsg), '') IS NOT NULL OR
+        @ForceSchemaBinding IS NOT NULL) BEGIN
+      SET @NeedExec = 1
+    END
+          
+    SELECT @StoredHash = schl.Hash
+    FROM
+      sqlver.tblSchemaLog schl
+    WHERE
+      @LastSchemaLogId = schl.SchemaLogId
+        
+    SET @StoredHash = COALESCE(@StoredHash, @StoredHashManifest)
+      
+      
+    IF @Debug = 1 BEGIN
+      SET @Msg = 'sqlver.spSysSchemaProcessObject: Calculating hash'
+      PRINT @Msg
+    END
+
+    IF @EventType NOT LIKE 'DROP%' BEGIN
+      SET @CalculatedHash = NULL
+      SET @CalculatedHash =  sqlver.udfHashBytesNMax(DEFAULT, @SQLForHash)
+    END
+      
+    IF (@CalculatedHash = @StoredHash) BEGIN
+      --Hash matches.  Nothing has changed.
+      SET @ChangeDetected = 0
+
+      IF @Debug = 1 BEGIN
+        SET @Msg = 'sqlver.spSysSchemaProcessObject: Hash matches.  Nothing has changed.'
+        PRINT @Msg
+      END
+        
+      IF @Comments IS NOT NULL BEGIN
+        SELECT
+          @CommentAlreadyExists = 1
+        FROM
+          sqlver.tblSchemaLog schl
+        WHERE
+          schl.SchemaLogId = @LastSchemaLogId AND
+          @Comments IN (SELECT RTRIM(LTRIM([Value])) FROM sqlver.udftGetParsedValues(schl.Comments, '|'))
+
+        IF ISNULL(@CommentAlreadyExists, 0) = 0 BEGIN
+        UPDATE schl
+          SET
+            Comments = Comments + ' | ' + @Comments
+          FROM
+            sqlver.tblSchemaLog schl
+          WHERE
+            schl.SchemaLogId = @LastSchemaLogId
+        END
+
+      END      
+    
+      UPDATE sqlver.tblSchemaManifest
+      SET
+        ObjectType = @ObjectType       
+      WHERE
+        SchemaManifestId = @ManifestId AND
+        ISNULL(ObjectType, '') <> @ObjectType   
+                    
+      SET @SkipLogging = 1
+    END
+    ELSE BEGIN
+      SET @ChangeDetected = 1
+    END
+
+
+
+    DECLARE @IsGenerated bit
+    SET @IsGenerated = 0
+
+    SELECT
+      @IsGenerated = 1
+    FROM
+      sys.schemas sch
+      JOIN sys.objects obj ON
+        sch.schema_id = obj.schema_id
+    WHERE
+      sch.name = @SchemaName AND
+      obj.name = @ObjectName AND
+      (
+        obj.type_desc LIKE 'CLR%' OR
+        (sch.name = 'opsstream' AND obj.name LIKE 'vwQXDLabel[_]%') OR
+        (sch.name = 'opsstream' AND obj.name LIKE 'vwQXD[_]%') OR
+        (sch.name = 'opsstream' AND obj.name LIKE 'vwQXDix[_]%') OR
+        (sch.name = 'opsstream' AND obj.name LIKE 'vwQXDixnuq[_]%') OR
+        (sch.name = 'opsstream' AND obj.name LIKE 'spgetQXD[_]%') OR
+        (sch.name = 'opsstream' AND obj.name LIKE 'spinsQXD[_]%') OR
+        (sch.name = 'opsstream' AND obj.name LIKE 'spdelQXD[_]%') OR
+        (sch.name = 'opsstream' AND obj.name LIKE 'spupdQXD[_]%') OR
+        (sch.name = 'opsstream' AND obj.name LIKE 'tguitblQXD[_]%') OR
+        (sch.name = 'opsstream' AND obj.name LIKE 'tgiivwQXD[_]%') OR
+        (sch.name = 'opsstream' AND obj.name LIKE 'vwQXDLabelUsers')
+      )
+
+
+    IF @ManifestId IS NULL BEGIN
+      IF @Debug = 1 BEGIN
+        SET @Msg = 'sqlver.spSysSchemaProcessObject: Inserting into sqlver.tblSchemaManifest'
+        PRINT @Msg
+      END
+        
+      INSERT INTO sqlver.tblSchemaManifest(  
+        ObjectName,
+        SchemaName,
+        DatabaseName,
+        ObjectType,
+        OrigDefinition,
+        DateAppeared,
+        CreatedByLoginName,
+        DateUpdated,
+        OrigHash,
+        CurrentHash,
+        IsEncrypted,
+        ExecuteAs,
+        StillExists,
+        SkipLogging,
+        Comments,
+        IsGenerated           
+      )
+      VALUES (
+        @ObjectName,
+        @SchemaName,
+        @DatabaseName,  
+        @ObjectType,
+        @OrigSQLFromEvent, --@SQLForHash,
+        @EventDate,
+        @LoginName,
+        @EventDate,
+        @CalculatedHash,
+        @CalculatedHash,
+        @IsEncrypted,
+        @ExecuteAs,
+        1, --Note that we update all the StillExists flags below 
+        0,
+        @ThisManifestComment,
+        @IsGenerated
+      )
+        
+      SET @ManifestId = SCOPE_IDENTITY()  
+
+      IF @Debug = 1 BEGIN
+        SET @Msg = 'sqlver.spSysSchemaProcessObject: New ManifestID=' + ISNULL(CAST(@ManifestID AS varchar(100)), 'NULL')
+        PRINT @Msg
+      END
+    END
+    ELSE BEGIN
+      IF @Debug = 1 BEGIN
+        SET @Msg = 'sqlver.spSysSchemaProcessObject: Updating sqlver.tblSchemaManifest (@ManifestID=' + ISNULL(CAST(@ManifestID AS varchar(100)), 'NULL') + ')'
+        PRINT @Msg
+      END
+        
+      UPDATE sqlver.tblSchemaManifest
+      SET
+        ObjectType = @ObjectType,
+        DateUpdated = @EventDate,
+        CurrentHash = @CalculatedHash,
+        IsEncrypted = @IsEncrypted,
+        ForceSchemaBinding = NULL,
+        ExecuteAs = @ExecuteAs,
+        Comments = @ThisManifestComment,
+        IsGenerated = @IsGenerated
+      WHERE
+        SchemaManifestId = @ManifestId              
+    END
+    
+    --Categorize object
+    IF OBJECT_ID('sqlver.spusrSchemaObjectCategorize') IS NOT NULL BEGIN
+      BEGIN TRY
+        EXEC sqlver.spusrSchemaObjectCategorize @ObjectManifestId = @ManifestId 
+      END TRY
+      BEGIN CATCH
+        PRINT 'sqlver.spSysSchemaProcessObject: Error when calling sqlver.spusrSchemaObjectCategorize. ' + ERROR_MESSAGE()
+      END CATCH
+    END                      
+
+    IF  @OrigDefinitionIsNull = 1 AND @ObjectType = 'TABLE' BEGIN
+      UPDATE sqlver.tblSchemaManifest
+      SET
+        OrigDefinition = @OrigSQLFromEvent
+      WHERE
+        SchemaManifestId = @ManifestId 
+    END
+
+    IF @SkipLogging = 0 BEGIN
+      IF @Debug = 1 BEGIN
+        SET @Msg = 'sqlver.spSysSchemaProcessObject: Inserting into sqlver.tblSchemaLog'
+        PRINT @Msg
+      END      
+        
+      INSERT INTO sqlver.tblSchemaLog (
+        SPID,
+        EventType,
+        ObjectName,
+        SchemaName,
+        DatabaseName, 
+        ObjectType,
+        SQLCommand,
+        EventDate,
+        LoginName,
+        EventData,
+        Comments,
+        Hash,
+        UserID,
+        SQLFullTable
+      )
+      VALUES (
+        COALESCE(@SPID, @@SPID),
+        @EventType,
+        @ObjectName,
+        @SchemaName,
+        @DatabaseName, 
+        @ObjectType,
+        @OrigSQLFromEvent, --@SQLStripped,
+        @EventDate,
+        @LoginName,
+        @EventData,
+        @Comments,
+        @CalculatedHash,
+        @UserID,
+        CASE WHEN @ObjectType IN ('TABLE', 'INDEX') THEN @SQLForHash END                
+      )
+    
+      SET @SchemaLogId = SCOPE_IDENTITY()
+      SET @StoredHash = @CalculatedHash            
+        
+    END    
+
+    IF @Debug = 1 BEGIN
+      PRINT '@NeedExec=' + ISNULL(CAST(@NeedExec AS varchar(100)), 'NULL')
+    END
+
+    IF @EventType NOT LIKE 'DROP%' AND
+       @ObjectType <> 'SYNONYM' AND
+       @NeedExec = 1 AND
+       ISNULL(@SkipExec, 0) = 0 BEGIN   
+      DECLARE @SQLForExec nvarchar(MAX)
+      SET @SQLForExec = @SQLStripped
+
+      --Switch CREATE to ALTER to execute DDL
+      SET @P = sqlver.udfFindInSQL('CREATE', @SQLForExec, 0)
+      SET @P2 = sqlver.udfFindInSQL('ALTER', @SQLForExec, 0)
+      IF @P > 0 AND (NULLIF(@P2, 0) IS NULL OR @P2 > @P) BEGIN
+        SET @SQLForExec= LEFT(@SQLForExec, @P - 1) + 'ALTER' + RIGHT(@SQLForExec, LEN(@SQLForExec) - LEN('CREATE'))
+      END
+
+      
+      IF @ForceSchemaBinding = 1 AND @HasSchemabinding = 0 BEGIN
+        SET @WithClause = ISNULL(NULLIF(RTRIM(@WithClause), '') + ', ', 'WITH ') + 'SCHEMABINDING'
+      END
+      ELSE IF @ForceSchemaBinding = 0 AND @HasSchemabinding = 1 BEGIN
+        DECLARE @NewWithClause nvarchar(MAX)
+
+        SELECT
+          @NewWithClause = ISNULL(@NewWithClause + ',', '') + sqlver.udfLTRIMSuper(sqlver.udfRTRIMSuper(REPLACE(pv.[Value], 'WITH', '')))
+        FROM
+          sqlver.udftGetParsedValues(@WithClause, ',') pv
+        WHERE
+          pv.[Value] NOT LIKE '%SCHEMABINDING%'
+        ORDER BY
+          pv.[Index]
+            
+        IF @NewWithClause IS NOT NULL BEGIN
+          SET @WithClause = 'WITH ' + @NewWithClause
+        END
+        ELSE BEGIN
+          SET @WithClause = NULL
+        END
+      END
+
+
+      IF COALESCE(NULLIF(RTRIM(@StoredExecuteAs), ''), NULLIF(RTRIM(@ExecuteAs), '')) IS NOT NULL BEGIN
+        IF @ExecuteAs IS NULL BEGIN
+          --If ExecuteAs is stored in sqlver.tblSchemaManifest but is not provided in WITH clause,
+          --add EXECUTE AS.
+          SET @WithClause = ISNULL(NULLIF(RTRIM(@WithClause), '') + ', ', 'WITH ') + 'EXECUTE AS ' + @StoredExecuteAs + @CRLF
+        END
+        ELSE BEGIN
+          IF @ForceExecuteAs = 1 BEGIN
+            --replace the WITH EXECUTE AS xxx with what is stored in sqlver.tblSchemaManifest
+            SET @WithClause = REPLACE(@WithClause, 'EXECUTE AS ' + @ExecuteAs, 'EXECUTE AS ' + @StoredExecuteAs)
+          END
+        END
+      END
+       
+      SET @WithClause = @CRLF + ISNULL(NULLIF(sqlver.udfRTRIMSuper(@WithClause), '') + @CRLF, '') 
+        
+      --Add in WITH token
+      IF PATINDEX('%{{!' + 'WITH!}}%', @SQLForExec) = 0 BEGIN
+        SET @SQLForExec = REPLACE(@SQLForExec, '{{!' + 'AS!}}','{{!' + 'WITH!}}{{!' + 'AS!}}')   
+      END
+
+      SET @SQLForExec = REPLACE(@SQLForExec, '{{!' + 'WITH!}}', ISNULL(NULLIF(RTRIM(@WithClause), ''), ''))
+      SET @SQLForExec = REPLACE(@SQLForExec, '{{!' + 'AS!}}',
+        ISNULL(NULLIF(RTRIM(@CopyrightMsg), ''), '') +
+        @CRLF + 'AS')      
+
+      SET @SQLForExec = REPLACE(@SQLForExec, '{{!' + 'ParseMarker!}}', @SVMarker)
+
+      IF @EventType NOT IN ('create_synonym') AND
+         @EventType NOT LIKE 'drop%' AND
+         @ObjectName <> 'spsysSchemaProcessObject' BEGIN
+
+        IF OBJECT_ID('tempdb..#SQLVerWork') IS NULL BEGIN
+          CREATE TABLE #SQLVerWork (
+            SchemaName sysname NULL,
+            ObjectName sysname NULL
+          )
+        END
+     
+
+        IF OBJECT_ID('tempdb..#SQLVerWork') IS NOT NULL BEGIN
+          SELECT
+            @Nested = 1 
+          FROM
+            #SQLVerWork (NOLOCK) wrk
+          WHERE
+            ISNULL(wrk.SchemaName, '') = ISNULL(@SchemaName, '') AND
+            wrk.ObjectName = @ObjectName
+        END
+
+        IF ISNULL(@Nested, 0) = 0 BEGIN
+          IF OBJECT_ID('tempdb..#SQLVerWork') IS NOT NULL BEGIN
+            INSERT INTO #SQLVerWork (
+              SchemaName,
+              ObjectName
+              )
+            SELECT
+              @SchemaName,
+              @ObjectName
+ 
+          END
+
+          BEGIN TRY
+            IF @Debug = 1 BEGIN
+              PRINT '>>>Executing: '
+              PRINT ISNULL(@SQLForExec, 'NULL')
+            END    
+            EXEC (@SQLForExec)
+
+            --process special Reprocess directives to allow regeneration of dependent objects 
+            IF ISNULL(@SchemaName, '') <> 'sqlver' AND
+              ISNULL(@ObjectName, '') <> 'spsysSchemaProcessObject' BEGIN
+              SET @IncludeMarker = '--$$SQLVer:Reprocess:'
+
+              SET @PInclude = PATINDEX('%' + @IncludeMarker + '%', @SQLStripped)
+
+              WHILE @PInclude > 0 BEGIN
+                BEGIN TRY
+
+                  SET @ThisInclude = sqlver.udfSubstrToDelims(@SQLStripped, @PInclude, NCHAR(10)) + NCHAR(10)
+
+                  SET @ThisIncludeExec = REPLACE(sqlver.udfRTRIMSuper(@ThisInclude), @IncludeMarker, REPLACE(@IncludeMarker, 'Reprocess', 'Include'))
+                  EXEC sqlver.spsysReprocessObjects @TargetStr = @ThisIncludeExec
+
+                  SET @SQLStripped = STUFF(@SQLStripped, @PInclude, LEN(@ThisInclude), '')
+
+                  SET @PInclude = PATINDEX('%' + @IncludeMarker + '%', @SQLStripped)
+                END TRY
+                BEGIN CATCH
+                  PRINT 'sqlver.spSysSchemaProcessObject: Error processing $$SQLVer:Reprocess (' + ISNULL(@ThisInclude, '') + ') ' + ERROR_MESSAGE()
+                  SET @PInclude = 0
+                END CATCH
+              END
+            END
+
+          END TRY
+          BEGIN CATCH
+            PRINT '...Error while SQLVer was re-executing definition of ' + ISNULL(@SchemaName + '.', '') + ISNULL(@ObjectName, 'NULL') +
+                  ': ' + ERROR_MESSAGE()
+            PRINT '>>>>'
+            EXEC sqlver.sputilPrintString @SQLForExec
+            PRINT '<<<<'
+            PRINT ''
+            PRINT ''
+          END CATCH
+        END
+
+        IF OBJECT_ID('tempdb..#SQLVerWork') IS NOT NULL BEGIN
+          DELETE FROM #SQLVerWork
+          WHERE
+            ISNULL(SchemaName, '') = ISNULL(@SchemaName, '') AND
+            ObjectName = @ObjectName          
+        END       
+      END
+        
+    END  
+
+    IF @Visible = 1 AND ISNULL(@Nested, 0) = 0 BEGIN  
+      IF @ExistingObject = 1 BEGIN
+
+        IF @ChangeDetected = 0 BEGIN
+          --no changes detected
+          IF @ForceSchemaBinding IS NOT NULL BEGIN
+            SET @Msg = 'Schemabinding forced ' + 
+              CASE WHEN @ForceSchemaBinding = 1 THEN 'on' ELSE 'off' END +
+              ' for {{Obj}} by SQLVer'          
+          END
+          ELSE IF @EventType = 'REPARSE' BEGIN
+            SET @Msg = '{{Obj}} reprocessed by SQLVer'
+          END
+          ELSE BEGIN
+            SET @Msg = 'No changes to {{Obj}} detected by SQLVer'
+          END
+        END
+        ELSE BEGIN
+          --changes detected
+          SET @Msg = 'Changes to {{Obj}} detected by SQLVer {{Hash}}'
+        END
+      END
+      ELSE BEGIN
+        --new object
+        SET @Msg = 'New object {{Obj}} detected by SQLVer {{Hash}}'
+      END
+
+      SET @Msg = REPLACE(@Msg, '{{Obj}}', @DatabaseName + '.' + ISNULL(NULLIF(RTRIM(@SchemaName), '') + '.', '') + @ObjectName)
+      SET @Msg = REPLACE(@Msg, '{{Hash}}',
+                        CASE
+                          WHEN @EventType NOT LIKE 'DROP%'
+                            THEN ISNULL('(Hash: ' +  master.dbo.fn_varbintohexstr(@CalculatedHash) + ')', '')
+                          ELSE ''
+                        END)
+
+      PRINT ISNULL(@Msg, 'Problem with SQLVer logging.')
+
+      --Print warnings
+      IF @IsEncrypted = 1 BEGIN
+        PRINT 'WARNING: SQL object is encrypted, so code NOT saved to the change log.'
+      END   
+
+      /*
+      IF @SkipLogging = 1 BEGIN   
+        IF @StoredSkipLogging = 1 BEGIN
+          PRINT 'Changes not logged by SQLVer, due to SkipLogging flag in sqlver.tblSchemaManifest'
+        END
+        ELSE BEGIN
+          SET @Msg = 'Changes not logged by SQLVer, due to @SkipLogging = 1'
+        END
+      END
+      */
+
+      --IF @ExistingObject = 1 AND ISNULL(@ExecuteAs, '') <> ISNULL(@StoredExecuteAs, '') BEGIN
+      --  PRINT 'WARNING: Security context changed via EXECUTE AS.'
+      --END      
+
+    END
+
+    --Update StillExists for ALL objects
+    EXEC [sqlver].[spsysSchemaExistSync]
+ 
+  END TRY
+  BEGIN CATCH
+    SET @Msg = 'Error logging DDL changes in database trigger sqlver.spSysSchemaProcessObject: ' + ERROR_MESSAGE()
+    PRINT @Msg
+
+    SET @Msg = '>>>' + @SQLForExec
+    EXEC sqlver.sputilPrintString @Msg
+  END CATCH
+  
+  IF @Debug = 1 BEGIN
+    SET @Msg = 'sqlver.spSysSchemaProcessObject: Finished'
+    PRINT @Msg
+  END    
+
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spsysSchemaProcessAll]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spsysSchemaProcessAll]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spsysSchemaProcessAll]
+@SkipExec bit = 1
+--$!SQLVer Jul  2 2024  8:08AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+
+  DECLARE @SchemaName sysname
+  DECLARE @ObjectName sysname
+  DECLARE @ForceSchemaBinding bit
+
+  --DDL triggers
+  DECLARE curThis CURSOR LOCAL STATIC FOR
+  SELECT
+    NULL AS SchemaName,
+    tg.name AS ObjectName,
+    NULL AS ForceSchemaBinding
+  FROM
+    sys.triggers tg    
+  WHERE
+    tg.parent_class = 0    
+  ORDER BY 
+    tg.name
+
+  OPEN curThis
+  FETCH curThis INTO @SchemaName, @ObjectName, @ForceSchemaBinding
+
+  WHILE @@FETCH_STATUS = 0 BEGIN
+    BEGIN TRY
+      --PRINT 'SQLVer is processing ' + ISNULL(@SchemaName, '') + '.' + @ObjectName 
+      EXEC sqlver.spSysSchemaProcessObject @SchemaName = @SchemaName, @ObjectName = @ObjectName, @ForceSchemaBinding = @ForceSchemaBinding, @SkipExec = @SkipExec
+    END TRY
+    BEGIN CATCH
+      PRINT '***SQLVer could not process trigger ' + ISNULL(@SchemaName, '') + '.' + @ObjectName + ': ' + ERROR_MESSAGE()
+    END CATCH
+    FETCH curThis INTO @SchemaName, @ObjectName, @ForceSchemaBinding
+  END
+  CLOSE curThis
+  DEALLOCATE curThis
+
+  --Other objects
+  DECLARE curThis CURSOR LOCAL STATIC FOR
+  SELECT
+    sch.name AS SchemaName,
+    obj.name AS ObjectName,
+    NULL AS ForceSchemaBinding
+  FROM
+    sys.objects obj
+    JOIN sys.schemas sch ON
+      obj.schema_id = sch.schema_id
+  WHERE
+    obj.type IN (
+      'FN',--	SQL_SCALAR_FUNCTION
+      --'FS',--	CLR_SCALAR_FUNCTION
+      --'FT',--	CLR_TABLE_VALUED_FUNCTION
+      'IF',--	SQL_INLINE_TABLE_VALUED_FUNCTION
+      'P', -- SQL_STORED_PROCEDURE
+      --'PC',--	CLR_STORED_PROCEDURE
+      'V', -- VIEW
+      'TF',-- SQL_TABLE_VALUED_FUNCTION
+      'TR',-- SQL_TRIGGER
+      'U'  -- USER_TABLE
+    )
+  ORDER BY 
+    sch.name,
+    obj.type,
+    obj.name
+
+  OPEN curThis
+  FETCH curThis INTO @SchemaName, @ObjectName, @ForceSchemaBinding
+
+  WHILE @@FETCH_STATUS = 0 BEGIN
+    BEGIN TRY
+      --PRINT 'SQLVer is processing ' + ISNULL(@SchemaName, '') + '.' + @ObjectName 
+      EXEC sqlver.spSysSchemaProcessObject @SchemaName = @SchemaName, @ObjectName = @ObjectName, @ForceSchemaBinding = @ForceSchemaBinding, @SkipExec = @SkipExec
+    END TRY
+    BEGIN CATCH
+      PRINT '***SQLVer could not process object ' + ISNULL(@SchemaName, '') + '.' + @ObjectName + ': ' + ERROR_MESSAGE()
+    END CATCH
+    FETCH curThis INTO @SchemaName, @ObjectName, @ForceSchemaBinding
+  END
+  CLOSE curThis
+  DEALLOCATE curThis
+
+  --Synonyms
+  DECLARE curThis CURSOR LOCAL STATIC FOR
+  SELECT
+    sch.name AS SchemaName,
+    syn.name AS ObjectName,
+    NULL AS ForceSchemaBinding
+  FROM
+    sys.synonyms syn  
+    JOIN sys.schemas sch ON 
+      syn.schema_id = sch.schema_id    
+  ORDER BY 
+    syn.name
+
+  OPEN curThis
+  FETCH curThis INTO @SchemaName, @ObjectName, @ForceSchemaBinding
+
+  WHILE @@FETCH_STATUS = 0 BEGIN
+    BEGIN TRY
+      --PRINT 'SQLVer is processing ' + ISNULL(@SchemaName, '') + '.' + @ObjectName 
+      EXEC sqlver.spSysSchemaProcessObject @SchemaName = @SchemaName, @ObjectName = @ObjectName, @ForceSchemaBinding = @ForceSchemaBinding, @SkipExec = @SkipExec
+    END TRY
+    BEGIN CATCH
+      PRINT '***SQLVer could not process synonym ' + ISNULL(@SchemaName, '') + '.' + @ObjectName + ': ' + ERROR_MESSAGE()
+    END CATCH
+    FETCH curThis INTO @SchemaName, @ObjectName, @ForceSchemaBinding
+  END
+  CLOSE curThis
+  DEALLOCATE curThis
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spsysSchemaObjectCompare]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spsysSchemaObjectCompare]
+END
+GO
+
+CREATE PROCEDURE sqlver.spsysSchemaObjectCompare
+@Hash1 varbinary(128),
+@Hash2 varbinary(128)
+--$!SQLVer Nov  7 2020  5:10AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+
+  DECLARE @SchemaName sysname
+  DECLARE @ObjectName sysname
+  DECLARE @ObjectType sysname
+
+  DECLARE @Buf1 nvarchar(MAX)
+  DECLARE @Buf2 nvarchar(MAX)
+  DECLARE @Date1 datetime
+  DECLARE @Date2 datetime
+
+  SELECT
+    @SchemaName = COALESCE(schl1.SchemaName, schm1.SchemaName, schm1a.SchemaName, schl2.Schemaname, schm2.SchemaName, schm2a.SchemaName),
+    @ObjectName = COALESCE(schl1.ObjectName, schm1.ObjectName, schm1a.ObjectName, schl2.Objectname, schm2.ObjectName, schm2a.ObjectName),
+
+    @Buf1 = COALESCE(schl1.SQLCommand, schm1.OrigDefinition),
+    @Buf2 = COALESCE(schl2.SQLCommand, schm2.OrigDefinition),
+
+    @Date1 = COALESCE(schl1.EventDate, schm1.DateAppeared),
+    @Date2 = COALESCE(schl2.EventDate, schm2.DateAppeared)
+  FROM
+    (SELECT 1 AS Placeholder) x 
+    LEFT JOIN sqlver.tblSchemaLog schl1 ON schl1.[Hash] = @Hash1
+    LEFT JOIN sqlver.tblSchemaManifest schm1 ON schm1.OrigHash = @Hash1 AND schl1.SchemaLogID IS NULL
+    LEFT JOIN sqlver.tblSchemaManifest schm1a ON schm1a.OrigHash = @Hash1 AND schm1a.SchemaName = @SchemaName AND schm1a.ObjectName = @ObjectName
+
+    LEFT JOIN sqlver.tblSchemaLog schl2 ON schl2.[Hash] = @Hash2
+    LEFT JOIN sqlver.tblSchemaManifest schm2 ON schm2.CurrentHash = @Hash2 AND schl2.SchemaLogID IS NULL
+    LEFT JOIN sqlver.tblSchemaManifest schm2a ON schm1a.OrigHash = @Hash2 AND schm2a.SchemaName = @SchemaName AND schm2a.ObjectName = @ObjectName
+
+  SELECT
+    @ObjectType = COALESCE(schm1.ObjectType, schm2.ObjectType)
+  FROM
+    (SELECT 1 AS Placeholder) x 
+    LEFT JOIN sqlver.tblSchemaManifest schm1 ON schm1.SchemaName = @SchemaName AND schm1.ObjectName = @ObjectName
+    LEFT JOIN sqlver.tblSchemaManifest schm2 ON schm2.SchemaName = @SchemaName AND schm2.ObjectName = @ObjectName
+  SELECT
+    @SchemaName AS SchemaName,
+    @ObjectName AS ObjectName,
+    @ObjectType AS ObjectType,
+    @Date1 AS Date1,
+    @Date2 AS Date2
+
+  IF @ObjectType = 'TABLE' BEGIN
+    DECLARE @Src1 nvarchar(MAX)
+    DECLARE @Src2 nvarchar(MAX)
+
+    SET @Src1 = sqlver.udfScriptTable(@SchemaName, @ObjectName)
+    SET @Src2 = sqlver.udfScriptTable(@SchemaName, @ObjectName)
+
+    PRINT '***Table Defintion 1: '
+    EXEC sqlver.sputilPrintString @Src1
+
+    PRINT '***Table Defintion 2: '
+    EXEC sqlver.sputilPrintString @Src2
+
+  END
+
+  IF OBJECT_ID('sqlver.udftGetDiffs_CLR') IS NOT NULL BEGIN
+    SELECT *
+    FROM
+      sqlver.udftGetDiffs_CLR(@Buf1, @Buf2)
+  END
+
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spsysSchemaObjectDefinition]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spsysSchemaObjectDefinition]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spsysSchemaObjectDefinition]
+@SchemaName sysname,
+@ObjectName sysname,
+@CurrentHash varbinary(128) = NULL,
+@ChunkID int = NULL,
+@MaxChunkID int = NULL OUTPUT,
+@DefinitionChunk varchar(8000) = NULL OUTPUT,
+@Definition varchar(MAX) = NULL OUTPUT,
+@Debug bit = 0
+
+WITH EXECUTE AS OWNER
+--$!SQLVer Nov  7 2020  5:10AM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  SET NOCOUNT ON
+  --Gets object definition in chunks
+  
+  DECLARE @Buf varchar(MAX)
+  DECLARE @BufFrag varchar(MAX)
+  
+  DECLARE @ObjectType sysname
+  
+      
+  IF @Debug = 1 PRINT 'spsysSchemaObjectDefinition (' + DB_NAME() + '): Starting for ' + ISNULL(@SchemaName, '') + '.' + ISNULL(@ObjectName, '')
+   
+  IF @Debug = 1 PRINT 'spsysSchemaObjectDefinition (' + DB_NAME() + '): @CurrentHash =' + ISNULL(master.dbo.fn_varbintohexstr(@CurrentHash), 'NULL')
+
+
+  SELECT @ObjectType = om.ObjectType
+  FROM
+    sqlver.tblSchemaManifest om
+  WHERE
+    om.SchemaName = @SchemaName AND
+    om.ObjectName = @ObjectName
+    
+  DECLARE @CurVer int --sqlver.tblSchemaLog.SchemaLogID for the current version
+  DECLARE @StartVer int --starting ID for iterating to build ALTER concat (WHERE SchemaLogID > @StartVer)
+  SET @Buf = ''
+
+  IF @ObjectType = 'TYPE' BEGIN
+    IF @Debug = 1 PRINT 'spsysSchemaObjectDefinition (' + DB_NAME() + '): Object is TYPE'
+    IF @Debug = 1 PRINT 'spsysSchemaObjectDefinition (' + DB_NAME() + '): @CurrentHash=' + ISNULL(master.dbo.fn_varbintohexstr(@CurrentHash), 'NULL')
+    
+    SET @Buf = sqlver.udfScriptType(@SchemaName, @ObjectName)
+  END
+
+  ELSE IF @ObjectType = 'TABLE' BEGIN
+    IF @Debug = 1 PRINT 'spsysSchemaObjectDefinition (' + DB_NAME() + '): Object is TABLE'
+    IF @Debug = 1 PRINT 'spsysSchemaObjectDefinition (' + DB_NAME() + '): @CurrentHash=' + ISNULL(master.dbo.fn_varbintohexstr(@CurrentHash), 'NULL')
+         
+    --Try to find version that caller currently has (in tblSysSchemaLog)
+    SELECT 
+      @CurVer = x.SchemaLogID
+    FROM
+      (
+      SELECT
+        schl.SchemaLogID,
+        ROW_NUMBER() OVER (PARTITION BY schl.SchemaName, schl.ObjectName, schl.Hash ORDER BY schl.SchemaLogID DESC) AS Seq
+      FROM 
+        sqlver.tblSchemaLog schl
+      WHERE
+        schl.SchemaName = @SchemaName AND
+        schl.ObjectName = @ObjectName AND
+        schl.Hash = @CurrentHash
+      ) x
+    WHERE
+      x.Seq = 1
+     
+    
+    IF @CurVer IS NULL BEGIN
+       --Caller has no known version.  Provide the current definition.
+      IF @Debug = 1 PRINT 'spsysSchemaObjectDefinition (' + DB_NAME() + '): No known version'
+     
+      SET @Buf = sqlver.udfScriptTable(@SchemaName, @ObjectName)
+
+    END
+    ELSE BEGIN
+      --Caller has a known version.  We'll concatenate the deltas together, starting
+      --with the next version.
+      IF @Debug = 1 PRINT '@CurVer=' + CAST(@CurVer AS varchar(100))
+      SET @Buf = ''
+
+      DECLARE @ThisDelta varchar(MAX)
+
+      DECLARE curDeltas CURSOR LOCAL STATIC FOR
+      SELECT schl.SQLCommand
+      FROM
+        sqlver.tblSchemaLog schl
+      WHERE  
+        schl.SchemaName = @SchemaName AND
+        schl.ObjectName = @ObjectName AND  
+        schl.SchemaLogID > @CurVer AND
+        schl.EventType <> 'REPARSE'
+
+        
+      OPEN curDeltas
+      FETCH curDeltas INTO @ThisDelta
+      
+      WHILE @@FETCH_STATUS = 0 BEGIN
+        IF @Debug = 1 PRINT 'spsysSchemaObjectDefinition (' + DB_NAME() + '): Found @ThisDelta=' + ISNULL(CAST(@ThisDelta AS varchar(100)), 'NULL')    
+    
+        SET @Buf = ISNULL(@Buf , '') + ISNULL(@ThisDelta + CHAR(13) + CHAR(10), '') 
+        FETCH curDeltas INTO @ThisDelta      
+      END
+      
+      CLOSE curDeltas
+      DEALLOCATE curDeltas
+
+    END        
+        
+  END
+  
+  ELSE BEGIN
+    IF @Debug = 1 PRINT 'spsysSchemaObjectDefinition (' + DB_NAME() + '): Not a table.  Simple object DDL.'
+
+    SELECT 
+      @Buf = COALESCE(schl_max.SQLCommand, om.OrigDefinition)
+    FROM 
+      sqlver.tblSchemaManifest om
+      LEFT JOIN (
+        SELECT
+          schl.SchemaName,
+          schl.ObjectName,
+          schl.SQLCommand,
+          schl.SchemaLogID,
+          ROW_NUMBER() OVER (PARTITION BY schl.SchemaName, schl.ObjectName ORDER BY schl.SchemaLogID DESC) AS Seq
+        FROM
+          sqlver.tblSchemaLog schl
+        ) schl_max ON
+        om.SchemaName = schl_max.SchemaName AND
+        om.ObjectName = schl_max.ObjectName AND
+        schl_max.Seq = 1
+    WHERE
+      om.SchemaName = @SchemaName AND
+      om.ObjectName = @ObjectName
+  
+  END
+  
+  IF @Debug = 1 BEGIN
+    PRINT 'Final @Buf='
+    EXEC sqlver.sputilPrintString @Buf
+  END
+
+  IF @Debug = 1 PRINT 'spsysSchemaObjectDefinition (' + DB_NAME() + '): Starting to chunk.  @Buf=' + ISNULL(CAST(@Buf AS varchar(100)), 'NULL')
+  
+ 
+  DECLARE @tvOut TABLE (
+    BufID int IDENTITY,
+    Buf varchar(8000)
+  )
+ 
+  DECLARE @i int
+  
+  SET @i = 1
+  WHILE @i <= LEN(@Buf + 'x') - 1 BEGIN
+    IF @Debug = 1 BEGIN
+      PRINT 'spsysSchemaObjectDefinition (' + DB_NAME() + '): Chunk #' + CAST(@i AS varchar(100)) + ': ' + SUBSTRING(@Buf, @i, 8000)
+    END
+    
+    INSERT INTO @tvOut (Buf)
+    VALUES (SUBSTRING(@Buf, @i, 8000))
+    
+    SET @i = @i + 8000
+  END 
+  
+  
+  SELECT @MaxChunkID = MAX(BufID) FROM @tvOut
+  
+  SET @DefinitionChunk = NULL
+  SET @Definition = @Buf  
+  
+  IF @Debug = 1 BEGIN
+    SELECT 'tvOut Chunk', * FROM @tvOut
+  END
+  
+
+  IF @Debug = 1 PRINT '@ChunkID = ' + ISNULL(CAST(@ChunkID AS varchar(100)), 'NULL')
+
+  IF @ChunkID IS NOT NULL BEGIN
+    SELECT @DefinitionChunk = tv.Buf
+    FROM @tvOut tv
+    WHERE 
+      tv.BufID = @ChunkID
+  END
+
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spsysSchemaObjectVersionsXML]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spsysSchemaObjectVersionsXML]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spsysSchemaObjectVersionsXML]
+@BufID int = NULL,
+@MaxBufID int = NULL OUTPUT,
+@Result varchar(8000) = NULL OUTPUT,
+@ObjectCategories varchar(8000) = NULL
+
+WITH EXECUTE AS OWNER
+--$!SQLVer Sep 27 2022  2:12PM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  SET NOCOUNT ON  
+/*
+This is a little tricky due to limitations imposed on us by accessing data from a remote server:
+
+  1) Though we can execute a stored procedure on the remote server that returns a resultset,
+     we can't insert those results into a table (including a table variable) on the local
+     server unless DTC is enabled.
+
+  2) We cannot execute or select from a user-defined function on the remote server.
+
+  3) We cannot select XML or varchar(MAX) data types
+
+So how can we get a resultset from the remote server without requiring configuration of DTC?
+
+We use XML, but on the remote server we cast it to varchar, and break it into 8000 byte chunks.
+The remote stored procedure will tell us how many chunks there are, and let us return individual
+chunks by index.
+
+We can then retrieve each chunk, and assemble in a variable locally.  Then we can cast back to
+XML, and then select the data.
+
+Not the most efficient way of doing things...but it avoids the need for special configuration
+of DTC on customer machines.
+*/
+
+  DECLARE @Debug bit
+  SET @Debug = 0
+  
+  IF @Debug = 1 BEGIN
+    PRINT 'spsysSchemaObjectVersionsXML: Starting (' + DB_NAME() + ')'
+    IF DB_NAME() = 'osMaster' PRINT 'Warning: Debug messages may be displayed in reverse order when coming from a linked server.'
+  END;
+
+  EXEC sqlver.spsysSchemaExistSync
+
+  DECLARE @XML xml
+
+  SET @XML = (
+    SELECT
+      cver.SchemaName,
+      cver.ObjectName,
+      cver.ObjectType,
+      cver.ObjectCategory,
+      cver.Hash,
+      cver.VersionDate,
+      cver.EventType,
+      cver.StillExists
+
+    FROM (
+      SELECT
+          om.SchemaName,
+          om.ObjectName,
+          om.ObjectType,
+          om.ObjectCategory,
+          CAST(master.dbo.fn_varbintohexstr(om.CurrentHash) AS varchar(100)) AS [Hash],
+          COALESCE(schl.EventDate, om.DateAppeared) AS VersionDate,
+          ROW_NUMBER() OVER (PARTITION BY om.SchemaName, om.ObjectName ORDER BY schl.SchemaLogID DESC) AS Seq,
+          schl.EventType,
+          om.StillExists
+        FROM 
+          sqlver.tblSchemaManifest om
+          LEFT JOIN sqlver.tblSchemaLog schl ON
+            om.SchemaName = schl.SchemaName AND
+            om.ObjectName = schl.ObjectName AND
+            (om.CurrentHash IS NULL OR om.CurrentHash = schl.Hash)
+            --experimental:  CurrentHash may be null in the case of a DROP
+            --om.CurrentHash = schl.Hash
+          LEFT JOIN sqlver.udftGetParsedValues(@ObjectCategories, ',') pv ON
+            om.ObjectCategory = pv.[Value]      
+
+        WHERE
+          (NULLIF(RTRIM(@ObjectCategories), '') IS NULL OR pv.[Value] IS NOT NULL) AND
+
+          (
+           om.SchemaName <> 'opsstream' OR
+           (om.ObjectName NOT LIKE 'typQXD[_]%' OR om.ObjectName ='typQXD_$$')
+          ) AND
+
+          (om.StillExists = 1 OR schl.EventType LIKE 'DROP%')
+      ) cver
+    WHERE cver.Seq = 1   
+      ORDER BY
+         CASE cver.ObjectName
+           WHEN 'dtgSQLVerLogSchemaChanges' THEN 1
+           ELSE 9
+         END,
+         CASE cver.ObjectType
+           WHEN 'USER_TABLE' THEN 0
+           WHEN 'VIEW' THEN 1 
+           WHEN 'SQL_TRIGGER' THEN 2 
+           WHEN 'SQL_SCALAR_FUNCTION' THEN 3 
+           WHEN 'SQL_TABLE_VALUED_FUNCTION' THEN 4     
+           WHEN 'SQL_STORED_PROCEDURE' THEN 5
+           ELSE 9
+         END,                
+         cver.schemaName,
+         cver.ObjectName  
+  FOR XML PATH ('OSDBObject'), TYPE, BINARY BASE64
+  ) 
+  
+
+  IF @Debug = 1 BEGIN
+    PRINT 'spsysSchemaObjectVersionsXML: HaveXML'
+    SELECT @XML AS [XML]
+  END
+ 
+  
+  DECLARE @Buf varchar(MAX)
+  SET @Buf = CAST(@XML AS varchar(MAX))
+ 
+  IF @Debug = 1  PRINT 'spsysSchemaObjectVersionsXML: Casted XML to @Buf.'
+
+ 
+  DECLARE @tvOut TABLE (
+    BufID int IDENTITY,
+    Buf varchar(8000)
+  )
+  
+  DECLARE @i int
+  
+  IF @Debug = 1 PRINT 'spsysSchemaObjectVersionsXML: LEN(@Buf) = ' + CAST(LEN(@Buf) AS varchar(100))
+  
+  SET @i = 0
+  WHILE @i <= LEN(@Buf) BEGIN
+    IF @Debug = 1 PRINT CAST(@i AS varchar(100)) + ':  ' + @Buf
+    INSERT INTO @tvOut (Buf)
+    VALUES (SUBSTRING(@Buf, @i, 8000))
+   
+    SET @i = @i + 8000
+  END 
+  
+  
+  SELECT @MaxBufID = MAX(BufID) FROM @tvOut
+  
+  IF @BufID IS NULL BEGIN
+    SELECT * FROM @tvOut
+  END
+  ELSE BEGIN
+    SELECT @Result = Buf
+    FROM @tvOut
+    WHERE 
+      BufID = @BufID
+  END
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spsysSchemaMaster_ObjectDefinition]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spsysSchemaMaster_ObjectDefinition]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spsysSchemaMaster_ObjectDefinition]
+@SchemaName sysname,
+@ObjectName sysname,
+@CurrentHash varbinary(128),
+@Definition varchar(MAX) OUTPUT
+
+WITH EXECUTE AS CALLER
+--$!SQLVer Aug  3 2021  9:26AM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  --We need to get schema version information from the OpsStream Master instance.
+  SET NOCOUNT ON
+  
+  DECLARE @Debug bit
+  SET @Debug = 0
+
+  IF @Debug = 1 PRINT 'spsysSchemaMaster_ObjectDefinition (' + DB_NAME() + '): Starting'
+
+  IF @Debug = 1 PRINT 'spsysSchemaMaster_ObjectDefinition (' + DB_NAME() + '): @SchemaName = ' + ISNULL(@SchemaName, 'NULL')
+  IF @Debug = 1 PRINT 'spsysSchemaMaster_ObjectDefinition (' + DB_NAME() + '): @ObjectName = ' + ISNULL(@ObjectName, 'NULL')
+  IF @Debug = 1 PRINT 'spsysSchemaMaster_ObjectDefinition (' + DB_NAME() + '): @CurrentHash = ' + ISNULL(master.dbo.fn_varbintohexstr(@CurrentHash), 'NULL')
+
+  DECLARE @MaxChunkID int
+  DECLARE @Chunk varchar(8000)
+  DECLARE @i int
+
+
+  DECLARE @ObjectType sysname
+  
+  SELECT
+    @ObjectType = om.ObjectType
+  FROM
+    sqlver.tblSchemaManifest om   
+  WHERE
+    om.SchemaName = @SchemaName AND
+    om.ObjectName = @ObjectName
+
+  IF @Debug = 1 PRINT 'spsysSchemaMaster_ObjectDefinition (' + DB_NAME() + '): @ObjectType = ' + ISNULL(@ObjectType, 'NULL')
+
+  --IF ISNULL(@ObjectType, '') NOT IN ('TABLE', 'INDEX') BEGIN
+  --  SET @CurrentHash = NULL
+  --END
+
+  SET @i = 1
+
+  IF @Debug = 1 PRINT 'spsysSchemaMaster_ObjectDefinition (' + DB_NAME() + '): Calling EXEC sqlver.spMasterSchemaObjectDefinition'
+
+  --Note:  sqlver.spMasterSchemaObjectDefinition is a synonym you must create to point to the remote repository database sqlver.spsysSchemaObjectDefinition
+  EXEC sqlver.spMasterSchemaObjectDefinition
+    @SchemaName = @SchemaName,
+    @ObjectName = @ObjectName,
+    @CurrentHash = @CurrentHash,    
+    @ChunkID = @i,
+    @MaxChunkID = @MaxChunkID OUTPUT,
+    @DefinitionChunk = @Chunk OUTPUT
+
+
+  SET @Definition = CAST(@Chunk AS varchar(MAX))
+
+  WHILE @i < @MaxChunkID BEGIN
+    
+    SET @i = @i + 1
+    
+    --Note:  sqlver.spMasterSchemaObjectDefinition is a synonym you must create to point to the remote master repository database
+    EXEC sqlver.spMasterSchemaObjectDefinition
+      @SchemaName = @SchemaName,
+      @ObjectName = @ObjectName,
+      @CurrentHash = @CurrentHash,        
+      @ChunkID = @i,
+      @MaxChunkID = @MaxChunkID OUTPUT,      
+      @DefinitionChunk = @Chunk OUTPUT
+
+    SET @Definition = @Definition + CAST(@Chunk AS varchar(MAX))    
+  END
+  
+  IF @Debug = 1 BEGIN
+    PRINT 'spsysSchemaMaster_ObjectDefinition (' + DB_NAME() + '): Final'
+    PRINT '>>>>>>>>>>>>>>>>>>'
+    EXEC sqlver.sputilPrintString @Definition
+    PRINT '<<<<<<<<<<<<<<<<<<'
+  END
+    
+
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spsysSchemaMaster_VersionsXML]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spsysSchemaMaster_VersionsXML]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spsysSchemaMaster_VersionsXML]
+@XML xml OUTPUT,
+@ObjectCategories varchar(8000) = NULL
+
+WITH EXECUTE AS CALLER
+--$!SQLVer Aug  3 2021  9:26AM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+
+  --We need to get schema version information from the OpsStream Master instance.
+  
+  DECLARE @Debug bit
+  SET @Debug = 0
+  
+  IF @Debug = 1 PRINT 'spsysSchemaMaster_VersionsXML: Starting'
+  
+  DECLARE @Buf varchar(MAX)
+
+  DECLARE @MaxBufID int
+  DECLARE @BufFrag varchar(8000)
+  DECLARE @i int
+  
+  
+  SET @Buf = ''
+
+  SET @i = 1
+  --Note: sqlver.spMasterSchemaObjectVersionsXML is a synonym that you must create to point to the remote master database sqlver.spsysSchemaObjectVersionsXML
+  EXEC sqlver.spMasterSchemaObjectVersionsXML
+    @BufID = @i, @MaxBufID = @MaxBufID OUTPUT, @Result = @BufFrag OUTPUT, @ObjectCategories = @ObjectCategories
+  SET @Buf = @BufFrag
+
+  WHILE @i < @MaxBufID BEGIN
+    SET @i = @i + 1
+    EXEC sqlver.spMasterSchemaObjectVersionsXML
+      @BufID = @i, @MaxBufID = @MaxBufID OUTPUT, @Result = @BufFrag OUTPUT, @ObjectCategories = @ObjectCategories
+
+    SET @Buf = @Buf + @BufFrag
+  END
+
+  SET @XML = CAST(@Buf AS xml)
+  
+  IF @Debug = 1 SELECT 'spsysSchemaMaster_VersionsXML', @XML AS XML
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spsysSchemaVersionUpdateFromMaster]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spsysSchemaVersionUpdateFromMaster]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spsysSchemaVersionUpdateFromMaster]
+@PerformUpdate bit = 0,
+@ObjectCategories varchar(8000) = '0,1000,1003,1004',
+@ProcessDrops bit = 0,
+@Debug bit = 0
+
+WITH EXECUTE AS CALLER
+--$!SQLVer Sep 27 2022  2:33PM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  SET NOCOUNT ON
+
+  IF @Debug = 1 PRINT 'spsysSchemaVersionUpdateFromMaster: Starting'
+  
+  IF DB_NAME() = 'osMaster' BEGIN
+    RAISERROR('Error in spsysSchemaVersionUpdateFromMaster: Cannot synchronize osMaster with itself.', 16, 1)
+    RETURN(1002)
+  END
+
+  --Do some quick housekeeping on tblSchemaManifest
+  EXEC sqlver.spsysSchemaExistSync
+
+   
+  DECLARE @tvMasterVersions TABLE (
+    SchemaName sysname NULL,
+    ObjectName sysname,
+    ObjectType sysname NULL,
+    ObjectCategory sysname,
+    VersionDate datetime,
+    Version int,
+    [Hash] varchar(100),
+    EventType sysname,
+    StillExists bit)
+    
+  --Retrieve current version information from Master (for all objects)  
+  IF @Debug = 1 PRINT 'spsysSchemaVersionUpdateFromMaster: Calling spsysSchemaMaster_VersionsXML'  
+  DECLARE @XML xml
+  EXEC sqlver.spsysSchemaMaster_VersionsXML @ObjectCategories = @ObjectCategories, @XML = @XML OUTPUT
+  
+  IF @Debug = 1 SELECT 'spsysSchemaVersionUpdateFromMaster', @XML
+  
+  --Digest XML version data from master into a table 
+  INSERT INTO @tvMasterVersions (
+    SchemaName,
+    ObjectName,
+    ObjectType,
+    ObjectCategory,
+    VersionDate,
+    Version,
+    [Hash],
+    EventType,
+    StillExists)
+
+	SELECT
+	  nref.value('SchemaName[1]', 'sysname') AS SchemaName,
+	  nref.value('ObjectName[1]', 'sysname') AS ObjectName,
+	  nref.value('ObjectType[1]', 'sysname') AS ObjectType,
+	  nref.value('ObjectCategory[1]', 'int') AS ObjectType,
+	  nref.value('VersionDate[1]', 'datetime') AS VersionDate,
+	  nref.value('Version[1]', 'int') AS Version,
+	  nref.value('Hash[1]', 'varchar(100)') AS [Hash],
+    ISNULL(nref.value('EventType[1]', 'sysname'), 'UNKONWN') AS EventType,
+    nref.value('StillExists[1]', 'bit') AS StillExists
+	FROM @XML.nodes('//OSDBObject') AS R(nref)
+	ORDER BY
+	  CASE nref.value('ObjectName[1]', 'sysname')
+      WHEN 'tblSysSchemaManifest' THEN 1    
+      WHEN 'tblSysSchemaLog' THEN 2
+	    WHEN 'spsysSchemaVersionUpdateFromMaster' THEN 6	    
+	    ELSE 10
+	  END
+	    
+  	
+
+  --walk through each object
+  IF @Debug = 1 PRINT 'spsysSchemaVersionUpdateFromMaster: Walking through objects'  
+    
+  DECLARE curThis CURSOR LOCAL STATIC FOR
+  SELECT
+    mv.SchemaName,
+    mv.ObjectName,
+    mv.ObjectType,
+    CASE WHEN om.StillExists = 1 THEN master.dbo.fn_varbintohexstr(om.CurrentHash) ELSE NULL END AS LocalHash,
+    mv.[Hash] AS MasterHash,
+    COALESCE(schl.EventDate, om.DateAppeared) AS VersionDate_Local,
+    mv.VersionDate AS VersionDate_Master,
+    CASE WHEN om.StillExists = 1 THEN om.CurrentHash ELSE NULL END AS LocalHashBin,
+    mv.EventType,
+    mv.StillExists AS MasterStillExists,
+    ISNULL(om.IsGenerated, 0)
+
+  FROM
+    @tvMasterVersions mv
+    LEFT JOIN sqlver.tblSchemaManifest om ON
+      mv.SchemaName = om.SchemaName AND
+      mv.ObjectName = om.ObjectName
+
+    LEFT JOIN (
+      SELECT
+        schl.SchemaName,
+        schl.ObjectName,
+        schl.Hash,
+        MAX(schl.EventDate) AS EventDate
+      FROM
+        sqlver.tblSchemaLog schl
+      GROUP BY
+        schl.SchemaName,
+        schl.ObjectName,
+        schl.Hash) schl ON 
+        om.SchemaName = schl.SchemaName AND
+      om.ObjectName = schl.ObjectName AND
+      om.CurrentHash = schl.Hash
+  WHERE
+    (mv.StillExists = 1 OR @ProcessDrops = 1) AND
+    (ISNULL(om.ExcludeFromSync, 0) = 0) AND 
+
+    (
+     (om.CurrentHash IS NULL AND mv.StillExists = 1) OR --Master object exists but is not present locally
+     (mv.Hash <> ISNULL(master.dbo.fn_varbintohexstr(om.CurrentHash), '')) --Master object version is different from what we have locally
+    )
+  ORDER BY
+    CASE mv.ObjectName
+      WHEN 'tblSchemaManifest' THEN 1    
+      WHEN 'tblSchemaLog' THEN 2
+      WHEN 'dtgSQLVerLogSchemaChanges' THEN 4    
+	    WHEN 'spsysSchemaVersionUpdateFromMaster' THEN 6	      
+      ELSE 10
+    END,  
+    --tables first
+    CASE mv.ObjectType
+       WHEN 'TABLE' THEN 0
+       WHEN 'VIEW' THEN 1 
+       WHEN 'SQL_TRIGGER' THEN 2 
+       WHEN 'SQL_SCALAR_FUNCTION' THEN 3 
+       WHEN 'SQL_TABLE_VALUED_FUNCTION' THEN 4     
+       WHEN 'SQL_INLINE_TABLE_VALUED_FUNCTION' THEN 5
+       WHEN 'SQL_STORED_PROCEDURE' THEN 6
+       ELSE 7
+    END,
+    --new objects
+    CASE WHEN om.SchemaManifestID IS NULL THEN 0 ELSE 1 END,
+    om.SchemaName,
+    om.ObjectName
+    
+
+  DECLARE @SQL nvarchar(MAX)
+  DECLARE @DropSQL nvarchar(MAX)  
+  DECLARE @ThisSchemaName sysname
+  DECLARE @ThisObjectName sysname
+  DECLARE @ThisObjectType sysname
+  DECLARE @LocalHash varchar(100)
+  DECLARE @MasterHash varchar(100)
+  DECLARE @LocalDate datetime
+  DECLARE @MasterDate datetime
+  DECLARE @LocalHashBin varbinary(128)
+  DECLARE @UpdateCount int
+  DECLARE @UpdateAppliedCount int
+  DECLARE @EventType sysname
+  DECLARE @MasterStillExists bit
+  DECLARE @IsGenerated bit
+
+  DECLARE @tvSQLLines TABLE (
+    Id int,
+    SQLLine nvarchar(MAX),
+    IsFK bit
+  )
+
+  DECLARE @SQLFK nvarchar(MAX)
+  DECLARE @ThisSQLFK nvarchar(MAX)
+
+
+  OPEN curThis
+  FETCH curThis INTO 
+    @ThisSchemaName,
+    @ThisObjectName,
+    @ThisObjectType,
+    @LocalHash,
+    @MasterHash,
+    @LocalDate,
+    @MasterDate,
+    @LocalHashBin,
+    @EventType,
+    @MasterStillExists,
+    @IsGenerated
+
+  SET @UpdateCount = 0
+  SET @UpdateAppliedCount = 0
+
+  WHILE @@FETCH_STATUS = 0 BEGIN 
+    SET @UpdateCount = @UpdateCount + 1
+
+    IF @Debug = 1 BEGIN
+      PRINT 'spsysSchemaVersionUpdateFromMaster: ******' + @ThisSchemaName + '.' + @ThisObjectName 
+      PRINT 'spsysSchemaVersionUpdateFromMaster: @LocalHash = ' + ISNULL(master.dbo.fn_varbintohexstr(@LocalHashBin) , 'NULL')
+      PRINT 'spsysSchemaVersionUpdateFromMaster: Calling spsysSchemaMaster_ObjectDefinition'
+    END
+
+    SET @SQL = NULL
+    DELETE FROM @tvSQLLines
+
+    EXEC sqlver.spsysSchemaMaster_ObjectDefinition
+      @SchemaName = @ThisSchemaName,
+      @ObjectName = @ThisObjectName,
+      @CurrentHash = @LocalHashBin,
+      @Definition = @SQL OUTPUT
+
+
+    IF @ThisObjectType = 'TABLE' BEGIN
+
+      IF @LocalHash IS NULL BEGIN     
+
+        /*
+        The problem with tables is that they can have foreign key constraints
+        (dependencies upon other tables).  This means that we will not be able
+        to create these constraints until the referenced table exists.
+
+        So we will use string manipulation to comment out the foreign key
+        constraints, and will save a copy of these constraints to execute later
+        after all other table changes have been applied.
+
+        To do this, we will split @SQL into individual lines.
+        */
+
+        IF @SQL IS NOT NULL BEGIN
+          IF @Debug = 1 BEGIN
+            PRINT '***spsysSchemaVersionUpdateFromMaster: Orig SQL to create table ' + @ThisSchemaName + '.' + @ThisObjectName + '>>1>'
+            EXEC sqlver.sputilPrintString @SQL
+            PRINT '<1<<'
+          END         
+        END
+
+        INSERT INTO @tvSQLLines (
+          Id,
+          SQLLine,
+          IsFK
+        )
+
+        SELECT
+          pv.[Index],
+          NULLIF(sqlver.udfLTRIMSuper(sqlver.udfRTRIMSuper([Value])), ''),
+          0
+        FROM
+          sqlver.udftGetParsedValues(@SQL, CHAR(13)) pv      
+          
+        SET @SQL = NULL              
+
+        UPDATE lns
+        SET
+          IsFK = 1
+        FROM
+          @tvSQLLines lns
+        WHERE
+          lns.SQLLine LIKE 'CONSTRAINT%' AND
+          PATINDEX('%FOREIGN KEY%', lns.SQLLine) > 0
+
+        UPDATE lns
+        SET
+          SQLLine = LEFT(lns.SQLLine, LEN(lns.SQLLine) - 1)
+        FROM
+          @tvSQLLines lns
+        WHERE
+          lns.IsFK = 1 AND
+          RIGHT(lns.SQLLine, 1) = ','
+        
+
+        SELECT
+          @SQL = ISNULL(@SQL, '') + ISNULL(lns.SQLLine + CHAR(13) + CHAR(10), '')
+        FROM
+          @tvSQLLines lns
+        WHERE
+          lns.IsFK = 0
+        ORDER BY
+          lns.Id
+
+
+        SELECT
+          @ThisSQLFK = ISNULL(@ThisSQLFK, '') +
+            'BEGIN TRY' + CHAR(13) + CHAR(10) +              
+            'ALTER TABLE [' + @ThisSchemaName + '].[' + @ThisObjectName + '] ADD ' + 
+            ISNULL(lns.SQLLine + CHAR(13) + CHAR(10), '') + 
+            'END TRY' + CHAR(13) + CHAR(10) + 
+            'BEGIN CATCH' + CHAR(13) + CHAR(10) + 
+            'PRINT ''$$$Error creating foreign keys for ' + ISNULL(@ThisSchemaName + '.', '') + ISNULL(@ThisObjectName, 'NULL') + ': '' + ERROR_MESSAGE()' +  CHAR(13) + CHAR(10) +
+            'END CATCH' + CHAR(13) + CHAR(10) 
+        FROM
+          @tvSQLLines lns
+        WHERE
+          lns.IsFK = 1
+        ORDER BY
+          lns.Id
+
+
+        IF @SQL IS NOT NULL BEGIN
+          IF @Debug = 1 BEGIN
+            PRINT '***spsysSchemaVersionUpdateFromMaster: Will create table ' + @ThisSchemaName + '.' + @ThisObjectName + '>>2>'
+            EXEC sqlver.sputilPrintString @SQL
+            PRINT '<2<<'
+          END         
+        END
+            
+      END
+    END
+     
+    --Print object information
+    IF @IsGenerated = 0 AND (@EventType NOT LIKE 'DROP%' OR @LocalHash IS NOT NULL) BEGIN
+      PRINT    
+        '****' + ISNULL(@ThisSchemaName, '') + '.' + ISNULL(@ThisObjectName, 'NULL') + ISNULL(' (' + @ThisObjectType + ')', '') + 
+        ' LocalDate: ' + ISNULL(CAST(@LocalDate AS varchar(100)), 'N/A') + '  MasterDate: ' + ISNULL(CAST(@MasterDate AS varchar(100)), 'N/A') + ' ' +
+        ' EXEC sqlver.spsysSchemaObjectCompareMaster ' + ISNULL(CAST(@LocalHash AS varchar(100)), 'NULL') + ', ' + ISNULL(CAST(@MasterHash AS varchar(100)), 'NULL')
+    END
+ 
+    IF @Debug = 1 PRINT 'spsysSchemaVersionUpdateFromMaster: @ThisObjectType = ' + ISNULL(@ThisObjectType, 'NULL')
+
+    DECLARE @P int
+    DECLARE @P2 INT
+
+    IF @Debug = 1 BEGIN
+      PRINT 'spsysSchemaVersionUpdateFromMaster: @EventType = ' + ISNULL(@EventType, 'NULL')
+    END
+
+    IF @IsGenerated = 1 OR (@EventType LIKE 'DROP%' AND @LocalHash IS NULL) BEGIN
+      --Ignore:  no need to drop object, because it doesn't exist
+      SET @SQL = NULL
+      SET @UpdateCount = @UpdateCount - 1
+      IF @Debug = 1 PRINT @ThisSchemaName + '.' +  @ThisObjectName + ' (' + @EventType + ') is not needed (StillExists = 0)'
+         
+    END
+    ELSE IF (@ThisObjectType IN ('SYNONYM', 'TYPE')) BEGIN
+      --Switch ALTER to CREATE
+      --Find the first ALTER that is in uncommented SQL code
+      SET @P = sqlver.udfFindInSQL('ALTER', @SQL, 0)
+      SET @P2 = sqlver.udfFindInSQL('CREATE', @SQL, 0)
+
+      IF @P > 0 AND (NULLIF(@P2, 0) IS NULL OR @P2 > @P) BEGIN
+        SET @SQL = sqlver.udfRTRIMSuper(sqlver.udfLTRIMSuper(LEFT(@SQL, @P - 1) + 'CREATE' + RIGHT(@SQL, LEN(@SQL) - LEN('ALTER'))))
+      END
+
+      --can't ALTER synonyms or types, so need to drop and re-create
+      IF @LocalHash IS NOT NULL BEGIN
+        SET @SQL = CONCAT('DROP ', @ThisObjectType, ' ', @ThisSchemaName, '.', @ThisObjectName) + CHAR(13) + CHAR(10) + @SQL
+      END
+    END
+    ELSE IF (@ThisObjectType NOT IN ('TABLE', 'INDEX')) BEGIN
+      IF @LocalHash IS NULL BEGIN
+        --Object does not yet exist.  Switch ALTER to CREATE
+        --Find the first ALTER that is in uncommented SQL code
+        SET @P = sqlver.udfFindInSQL('ALTER', @SQL, 0)
+        SET @P2 = sqlver.udfFindInSQL('CREATE', @SQL, 0)
+
+        IF @P > 0 AND (NULLIF(@P2, 0) IS NULL OR @P2 > @P) BEGIN
+          SET @SQL = sqlver.udfRTRIMSuper(sqlver.udfLTRIMSuper(LEFT(@SQL, @P - 1) + 'CREATE' + RIGHT(@SQL, LEN(@SQL) - LEN('ALTER'))))
+        END
+      END
+      ELSE BEGIN
+        --Object exists.  Switch CREATE to ALTER
+        --Find the first ALTER that is in uncommented SQL code
+        SET @P = sqlver.udfFindInSQL('CREATE', @SQL, 0)
+        SET @P2 = sqlver.udfFindInSQL('ALTER', @SQL, 0)
+
+        IF @P > 0 AND (NULLIF(@P2, 0) IS NULL OR @P2 > @P) BEGIN
+          SET @SQL = sqlver.udfRTRIMSuper(sqlver.udfLTRIMSuper(LEFT(@SQL, @P - 1) + 'ALTER' + RIGHT(@SQL, LEN(@SQL) - LEN('CREATE'))))
+        END
+      END
+    END
+
+
+    IF @ThisObjectName NOT LIKE 'bak%' AND
+      @ThisObjectName NOT LIKE 'tmp%' BEGIN    
+        
+      
+      IF @PerformUpdate = 1 AND @SQL IS NOT NULL BEGIN      
+        
+        BEGIN TRY
+          IF @Debug = 1 BEGIN
+            PRINT 'spsysSchemaVersionUpdateFromMaster: About to execute @SQL' + '>>3>'
+            EXEC sqlver.sputilPrintString @SQL
+            PRINT '<3<<'
+          END
+                            
+          EXEC(@SQL)
+          SET @UpdateAppliedCount = @UpdateAppliedCount + 1
+
+          IF @Debug = 1 PRINT 'spsysSchemaVersionUpdateFromMaster: Done with execute @SQL'   
+        END TRY
+        BEGIN CATCH
+          PRINT 'spsysSchemaVersionUpdateFromMaster: Error when executing @SQL: ' + ERROR_MESSAGE()
+          PRINT '>>>'
+          EXEC sqlver.sputilPrintString @SQL
+        END CATCH  
+            
+      END
+    END
+
+    IF @PerformUpdate = 1 AND @ThisSQLFK IS NOT NULL BEGIN
+
+      SET @SQLFK = ISNULL(@SQLFK, '') + ISNULL(@ThisSQLFK + CHAR(13) + CHAR(10), '')
+      SET @ThisSQLFK = NULL
+    END
+    
+
+    FETCH curThis INTO 
+      @ThisSchemaName,
+      @ThisObjectName,
+      @ThisObjectType,
+      @LocalHash,
+      @MasterHash,
+      @LocalDate,
+      @MasterDate,
+      @LocalHashBin,
+      @EventType,
+      @MasterStillExists,
+      @IsGenerated
+  END
+  CLOSE curThis
+  DEALLOCATE curThis
+
+
+  IF @SQLFK IS NOT NULL BEGIN
+    --Now we can create foreign keys
+
+    IF @Debug = 1 BEGIN
+      PRINT 'spsysSchemaVersionUpdateFromMaster: Executing SQL to create foreign keys >>4>'
+      EXEC sqlver.sputilPrintString @SQLFK
+      PRINT '<4<<'
+    END
+
+    BEGIN TRY
+      EXEC(@SQLFK)
+    END TRY
+    BEGIN CATCH
+      PRINT 'spsysSchemaVersionUpdateFromMaster: Error while creating foreign keys: ' + ERROR_MESSAGE()
+      --PRINT '>>>' + ISNULL(@SQLFK, 'NULL')      
+    END CATCH
+  END
+
+
+  SELECT   
+    om.SchemaName,
+    om.ObjectName,
+    om.ObjectType,
+    'No longer exists in master' AS Note
+  FROM
+    sqlver.tblSchemaManifest om
+    LEFT JOIN sqlver.udftGetParsedValues(@ObjectCategories, ',') pv ON
+      om.ObjectCategory = pv.[Value]      
+    LEFT JOIN @tvMasterVersions mv ON
+      om.SchemaName = mv.SchemaName AND
+      om.ObjectName = mv.ObjectName
+  WHERE
+    om.StillExists = 1 AND
+    ISNULL(om.ExcludeFromSync, 0) = 0 AND
+    mv.ObjectName IS NULL AND
+    (NULLIF(RTRIM(@ObjectCategories), '') IS NULL OR pv.[Value] IS NOT NULL)
+
+
+  IF @UpdateCount = 0 BEGIN
+    PRINT 'spsysSchemaVersionUpdateFromMaster: Nothing needs to be updated.'
+  END
+  ELSE BEGIN
+    PRINT 'spsysSchemaVersionUpdateFromMaster: ' + ISNULL(CAST(@UpdateCount AS varchar(100)), 'No') + ' update' +
+      CASE WHEN @UpdateCount <> 1 THEN 's' ELSE '' END + ' found.'
+    PRINT 'spsysSchemaVersionUpdateFromMaster: ' + ISNULL(CAST(@UpdateAppliedCount AS varchar(100)), 'No') + ' update' + 
+      CASE WHEN @UpdateAppliedCount <> 1 THEN 's' ELSE '' END + ' applied.'
+  END
+
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spUninstall]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spUninstall]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spUninstall]
+@ReallyRemoveAll bit = 0
+--$!SQLVer Nov  7 2020  5:10AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  SET NOCOUNT ON
+  
+  DECLARE @CRLF varchar(5)
+  SET @CRLF = CHAR(13) + CHAR(10)
+  
+  IF ISNULL(@ReallyRemoveAll, 0) = 0 BEGIN
+    PRINT 'Executing this procedure will remove ALL SqlVer objects from the database ' + DB_NAME() + ' ' +
+      'and will therefore PERMANENTLY DELETE ALL VERSION INFORMATION in the tables ' +
+      'sqlver.tblSchemaManifest and sqlver.tblSchemaLog.' + @CRLF + @CRLF +
+      'If this is really what you want to do, execute this procedure with the @ReallyRemoveAll paramter ' +
+      'set to 1, like this:' + @CRLF + @CRLF +
+      '  EXEC sqlver.spUninstall @ReallyRemoveAll = 1' + @CRLF + @CRLF +
+      'You should probably make a backup of the data in the tables sqlver.tblSchemaManifest and sqlver.tblSchemaLog ' +
+      'before you do so, and you should also verify that you are in the correct database.  Do you really want to ' +
+      'remove all version information for database ' + DB_NAME() + '??'          
+      
+    RETURN
+  END
+  ELSE BEGIN    
+    DECLARE @SQL nvarchar(MAX)
+      
+    IF EXISTS (SELECT * FROM sys.triggers WHERE parent_class_desc = 'DATABASE' AND name = N'dtgLogSchemaChanges') BEGIN
+      DISABLE TRIGGER [dtgLogSchemaChanges] ON DATABASE
+      DROP TRIGGER [dtgLogSchemaChanges] ON DATABASE
+    END  
+        
+    SELECT 
+      @SQL = ISNULL(@SQL + CHAR(10), '') + 'DROP SYNONYM ' + sch.name + '.' + syn.name
+    FROM
+      sys.synonyms syn
+      JOIN sys.objects obj ON
+        syn.object_id = obj.object_id 
+      JOIN sys.schemas sch ON
+        obj.schema_id = sch.schema_id
+    WHERE
+      sch.name = 'sqlver' OR
+      syn.base_object_name LIKE '\[sqlver\]%' ESCAPE '\'
+      
+    PRINT @SQL      
+    EXEC (@SQL)
+    
+    DECLARE curThis CURSOR LOCAL STATIC FOR
+    SELECT 
+      'DROP ' +      
+        CASE obj.type_DESC
+          WHEN 'SQL_STORED_PROCEDURE' THEN 'PROCEDURE'
+          WHEN 'SQL_SCALAR_FUNCTION' THEN 'FUNCTION'
+          WHEN 'SQL_TABLE_VALUED_FUNCTION' THEN 'FUNCTION'
+          WHEN 'CLR_SCALAR_FUNCTION' THEN 'FUNCTION'
+          WHEN 'CLR_STORED_PROCEDURE' THEN 'PROCEDURE'
+          WHEN 'VIEW' THEN 'VIEW'
+          WHEN 'USER_TABLE' THEN 'TABLE'
+       END +    
+       ' ' + sch.name + '.' + obj.name           
+    FROM
+      sys.objects obj
+      JOIN sys.schemas sch ON
+        obj.schema_id = sch.schema_id
+    WHERE    
+      sch.name = 'sqlver' AND
+      obj.type_DESC IN (    
+        'SQL_STORED_PROCEDURE',
+        'SQL_SCALAR_FUNCTION',        
+        'SQL_TABLE_VALUED_FUNCTION',        
+        'CLR_SCALAR_FUNCTION',        
+        'CLR_STORED_PROCEDURE',
+        'VIEW',
+        'USER_TABLE'
+      )
+    ORDER BY
+      CASE obj.type_DESC
+        WHEN 'SQL_STORED_PROCEDURE' THEN 1
+        WHEN 'SQL_SCALAR_FUNCTION' THEN 2       
+        WHEN 'SQL_TABLE_VALUED_FUNCTION' THEN 3
+        WHEN 'CLR_SCALAR_FUNCTION' THEN 4
+        WHEN 'CLR_STORED_PROCEDURE' THEN 5
+        WHEN 'VIEW' THEN 6
+        WHEN 'USER_TABLE' THEN 7
+     END
+      
+    OPEN curThis
+    FETCH curThis INTO @SQL
+    WHILE @@FETCH_STATUS = 0 BEGIN
+      EXEC (@SQL)
+      FETCH curThis INTO @SQL
+    END
+    CLOSE curThis
+    DEALLOCATE curThis
+          
+          
+    IF EXISTS (SELECT schema_id from sys.schemas WHERE name = 'sqlver') BEGIN
+      DROP SCHEMA [sqlver]
+    END
+    
+    PRINT 'All SQLVer objects have been removed'
+  END
+
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spsysGenerateSQLVer]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spsysGenerateSQLVer]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spsysGenerateSQLVer]
+@EssentialOnly bit = 0,
+@Buf nvarchar(MAX) = NULL OUTPUT,
+@ReturnResultset bit = 0
+--$!SQLVer Mar 12 2025 10:11PM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  SET NOCOUNT ON
+
+  DECLARE @FinalBuf nvarchar(MAX)
+
+  DECLARE @SQL nvarchar(MAX)
+  DECLARE @IntroBanner nvarchar(MAX)
+  DECLARE @PostRunSQL nvarchar(MAX)
+
+  DECLARE @LicenseBody nvarchar(MAX)
+  SET @LicenseBody =
+'
+/*
+SQLVer
+©Copyright 2006-2025 by David Rueter (drueter@assyst.com)
+See:  https://github.com/davidrueter/sqlver
+
+The MIT License (MIT)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+'
+
+  SET @IntroBanner =
+    '--SQLVer' + CASE WHEN @EssentialOnly = 1 THEN 'Essential' ELSE '' END +
+    ' generated on ' + CAST(GETDATE() AS varchar(100)) + NCHAR(13) + NCHAR(10) +
+
+    @LicenseBody +
+
+    NCHAR(13) + NCHAR(10) + 
+    NCHAR(13) + NCHAR(10) 
+
+
+  SET @PostRunSQL = NCHAR(13) + NCHAR(10) +  '
+
+PRINT ''Done processing all database objects.  SQLVer is now ready for normal use.''
+PRINT ''''
+'
+
++ CASE WHEN ISNULL(@EssentialOnly, 0) = 0 THEN
+'
+PRINT ''''
+PRINT ''If you like, you can now build one or more of these CLR assemblies:''
+PRINT ''''
+PRINT ''
+/*
+EXEC sqlver.spsysBuildCLR_DiffMatch
+EXEC sqlver.spsysBuildCLR_GetHTTP
+EXEC sqlver.spsysBuildCLR_SendMail
+EXEC sqlver.spsysBuildCLR_FTP
+EXEC sqlver.spsysBuildCLR_SQLVerUtil
+*/
+''
+'
+
+ ELSE '' END
+
+
+
+
+  CREATE TABLE #essential (
+    FQObjName nvarchar(512),
+    Seq int
+  )
+
+  INSERT INTO #essential (
+    FQObjName,
+    Seq
+  )
+  VALUES
+    ('req', 10),
+    ('[sqlver].[tblNumbers]', 20),
+    ('popnum', 30),
+    ('[sqlver].[sputilPrintString]', 40),
+    ('[sqlver].[sputilResultSetAsStr]', 50),
+    ('[sqlver].[udfFindInSQL]', 80),
+    ('[sqlver].[udfHashBytesNMax]', 90),
+    ('[sqlver].[udfIsInComment]', 100),
+    ('[sqlver].[udfLTRIMSuper]', 110),
+    ('[sqlver].[udfRTRIMSuper]', 120),
+    ('[sqlver].[udfScriptTable]', 130),
+    ('[sqlver].[udfScriptType]', 135),
+    ('[sqlver].[udfSQLTerm]', 140),
+    ('[sqlver].[udfStripSQLComments]', 150),
+    ('[sqlver].[udfStripSQLCommentsExcept]', 150),
+    ('[sqlver].[udfSubstrToDelims]', 160),
+    ('[sqlver].[udftGetParsedValues]', 170),
+
+    ('[sqlver].[tblSchemaLog]', 174),
+    ('[sqlver].[tblSchemaManifest]', 178),
+
+    ('[sqlver].[spsysSchemaExistSync]', 180),
+    ('[sqlver].[spusrSchemaObjectCategorize]', 190),
+    ('[sqlver].[spsysSchemaProcessObject]', 200),
+    ('[sqlver].[spsysSchemaProcessAll]', 210),
+    ('[sqlver].[spsysSchemaObjectCompare]', 220),
+    ('[sqlver].[spsysSchemaObjectDefinition]', 230),
+    ('[sqlver].[spsysSchemaObjectVersionsXML]', 240),
+    ('[sqlver].[spsysSchemaMaster_ObjectDefinition]', 250),
+    ('[sqlver].[spsysSchemaMaster_VersionsXML]', 260),
+    ('[sqlver].[spsysSchemaVersionUpdateFromMaster]', 270),
+    ('[sqlver].[spUninstall]', 280),
+    ('[sqlver].[spsysGenerateSQLVer]', 290),
+    ('[dtgSQLVerLogSchemaChanges]', 300)
+
+
+  IF OBJECT_ID('tempdb..#scripts') IS NOT NULL BEGIN
+    DROP TABLE #scripts
+  END
+
+  CREATE TABLE #scripts (
+    Id int IDENTITY,
+    Def nvarchar(MAX),
+    FQObjName sysname NULL,
+    ObjectType sysname NULL,
+    Seq int,
+    IsEssential bit,
+    EsSeq int
+  )
+
+  
+  INSERT INTO #scripts (
+    FQObjName,
+    Def
+  )
+  SELECT 'req', 'PRINT ''Installing SQLVer'''
+
+
+  INSERT INTO #scripts (
+    FQObjName,
+    Def
+  )
+  SELECT 'req', 'SET ANSI_NULLS ON'
+
+
+  INSERT INTO #scripts (
+    FQObjName,
+    Def
+  )
+  SELECT 'req', 'SET QUOTED_IDENTIFIER ON'
+
+
+  INSERT INTO #scripts (
+    FQObjName,
+    Def
+  )
+  SELECT 'req',
+    'IF EXISTS (SELECT * FROM sys.triggers WHERE name = ''dtgSQLVerLogSchemaChanges'' AND parent_class = 0) BEGIN' + NCHAR(13) + NCHAR(10) +
+    ' DROP TRIGGER [dtgSQLVerLogSchemaChanges] ON DATABASE' + NCHAR(13) + NCHAR(10) +
+    'END'
+
+  INSERT INTO #scripts (
+    FQObjName,
+    ObjectType,
+    Def
+  )
+  SELECT 'req', 'SCHEMA',
+    'IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = ''sqlver'') BEGIN' + NCHAR(13) + NCHAR(10) +
+    'DECLARE @SQL nvarchar(MAX)' + NCHAR(13) + NCHAR(10) +
+    'SET @SQL = ''CREATE SCHEMA [sqlver] ''' + NCHAR(13) + NCHAR(10) +
+    'EXEC(@SQL)' + NCHAR(13) + NCHAR(10) +
+    'END'
+
+
+  INSERT INTO #scripts (
+    FQObjName,
+    Def
+  )
+  SELECT
+    QUOTENAME(sch.name) + '.' + QUOTENAME(typ.name) AS FQObjName,    
+    sqlver.udfScriptType(sch.name, typ.name)
+  FROM
+    sys.types typ
+    JOIN sys.schemas sch ON
+      typ.schema_id = sch.schema_id
+  WHERE
+    typ.is_user_defined = 1 AND
+    sch.name = 'sqlver'
+  ORDER BY
+    sch.name,
+    typ.name
+  
+
+  INSERT INTO #scripts (
+    FQObjName,
+    Def
+  )
+  VALUES ('popnum', 
+  'IF NOT EXISTS(SELECT TOP 1 Number FROM sqlver.tblNumbers) BEGIN' + NCHAR(13) + NCHAR(10) +
+  'INSERT INTO sqlver.tblNumbers (Number)' + NCHAR(13) + NCHAR(10) +
+  'SELECT TOP 200000' + NCHAR(13) + NCHAR(10) +
+  'ROW_NUMBER() OVER (ORDER BY a.number, b.number)' + NCHAR(13) + NCHAR(10) +
+  'FROM' + NCHAR(13) + NCHAR(10) +
+  '  master..spt_values a' + NCHAR(13) + NCHAR(10) +
+  ' JOIN master..spt_values b ON 1 = 1' + NCHAR(13) + NCHAR(10) +
+  'END' + NCHAR(13) + NCHAR(10) +
+  'ELSE BEGIN' + NCHAR(13) + NCHAR(10) +
+  'PRINT ''WARNING: SQLVer requires that table sqlver.tblNumbers contain unique sequential integers from 1 to 200000.  Fewer rows may cause unexpected results.  More rows may be OK, but may degrade performance of certain functions.''' +
+  NCHAR(13) + NCHAR(10) +
+  'END' + NCHAR(13) + NCHAR(10)
+  )
+
+
+  INSERT INTO #scripts (
+    FQObjName,
+    ObjectType,
+    Def
+  )
+  SELECT
+    QUOTENAME(sch.name) + '.' + QUOTENAME(obj.name),
+
+    obj.type,
+
+    CAST(
+    CASE obj.type
+      WHEN 'U' THEN sqlver.udfScriptTable(sch.name, obj.name)
+      WHEN 'SN' THEN N'CREATE SYNONYM [' + sch.name + N'].[' + obj.name + N'] FOR ' + syn.base_object_name
+      ELSE sqlver.udfRTRIMSuper(sqlver.udfLTRIMSuper(sm.definition))
+    END AS nvarchar(MAX)) +
+
+    NCHAR(13) + NCHAR(10)
+  FROM
+    sys.schemas sch
+    JOIN sys.objects obj ON
+      sch.schema_id = obj.schema_id
+    LEFT JOIN sys.sql_modules sm ON
+      obj.object_id = sm.object_id
+
+    LEFT JOIN sys.synonyms syn ON
+      sch.schema_id = syn.schema_id AND
+      obj.object_id = syn.object_id
+
+  WHERE
+    (
+     sch.name = 'sqlver' OR
+     obj.name = 'sqlver.spSysSchemaProcessObject' OR
+     (obj.type = 'SN' AND PARSENAME(syn.base_object_name, 2) = 'sqlver' AND sch.name IN ('dbo', 'sqlver'))
+    ) AND
+    obj.type NOT IN (
+      'D', --  DEFAULT_CONSTRAINT
+      'F',   --FOREIGN_KEY_CONSTRAINT
+      'FS',  --CLR_SCALAR_FUNCTION
+      'FT',  --CLR_TABLE_VALUED_FUNCTION
+      'IT',  --INTERNAL_TABLE
+      'PC',  --CLR_STORED_PROCEDURE
+      'PK',  --PRIMARY_KEY_CONSTRAINT
+      'S',  --SYSTEM_TABLE
+      'SQ',  --SERVICE_QUEUE
+      'TT',  --TYPE_TABLE
+      'UQ'  --UNIQUE_CONSTRAINT
+      )
+  ORDER BY
+    CASE obj.type
+      WHEN 'U' THEN 1   --USER_TABLE
+      WHEN 'V' THEN 2   --VIEW
+      WHEN 'IF' THEN 3  --SQL_INLINE_TABLE_VALUED_FUNCTION
+      WHEN 'FN' THEN 4  --SQL_SCALAR_FUNCTION
+      WHEN 'TF' THEN 5  --SQL_TABLE_VALUED_FUNCTION
+      WHEN 'P' THEN 6   --SQL_STORED_PROCEDURE
+      WHEN 'SN' THEN 7  --SYNONYM
+      WHEN 'TR' THEN 8  --SQL_TRIGGER
+    END
+
+
+  INSERT INTO #scripts (
+    FQObjName,
+    ObjectType,
+    Def
+  )
+  SELECT
+    QUOTENAME(tg.name),
+    'TR',
+    sm.definition
+  FROM
+    sys.triggers tg
+    LEFT JOIN sys.sql_modules sm ON
+      tg.object_id = sm.object_id
+  WHERE
+    tg.parent_class = 0
+  ORDER BY
+    tg.name
+
+  --update #scripts to flag IsEssential and update EsSeq
+  UPDATE scr
+  SET
+    EsSeq = es.Seq,
+    IsEssential = CASE WHEN es.FQObjName IS NOT NULL THEN 1 ELSE 0 END
+  FROM
+    #scripts scr 
+    LEFT JOIN #essential es ON
+      scr.FQObjName = es.FQObjName
+
+
+  --update #scripts to set Seq
+  UPDATE scr
+  SET
+    Seq = x.Seq
+  FROM
+    (
+    SELECT
+      scr.Id,
+      DENSE_RANK() OVER (ORDER BY CASE WHEN scr.IsEssential = 1 THEN 1 ELSE 2 END, scr.EsSeq, scr.Id) AS Seq
+    FROM
+      #scripts scr     
+     ) x
+    JOIN #scripts scr ON
+      x.Id = scr.Id
+
+
+  --SQL script that will be run by sqlver.sputilResultSetAsStr to concatenate the individual script elements into the final ouput string
+  SET @SQL =
+    'SELECT
+    
+      CASE scr.ObjectType WHEN ''U'' THEN ''IF OBJECT_ID('' + CHAR(39) + scr.FQObjName + CHAR(39) + '') IS NULL BEGIN'' + NCHAR(13) + NCHAR(10) ELSE '''' END +
+
+      ISNULL(
+      ''IF OBJECT_ID('' + CHAR(39) + scr.FQObjName + CHAR(39) + '') IS NOT NULL BEGIN'' + NCHAR(13) + NCHAR(10) +
+      ''  DROP '' +
+      CASE scr.ObjectType
+        WHEN ''P'' THEN ''PROCEDURE''
+        WHEN ''V'' THEN ''VIEW''
+        WHEN ''SN'' THEN ''SYNONYM''
+        WHEN ''IF'' THEN ''FUNCTION''
+        WHEN ''FN'' THEN ''FUNCTION''
+        WHEN ''TF'' THEN ''FUNCTION''
+        WHEN ''TR'' THEN ''TRIGGER''
+      END +
+      '' '' + scr.FQObjName  + NCHAR(13) + NCHAR(10) +
+      ''END'' + NCHAR(13) + NCHAR(10) +
+      ''GO'' + NCHAR(13) + NCHAR(10) + 
+      NCHAR(13) + NCHAR(10)
+      , '''') + 
+
+      scr.Def +
+
+      NCHAR(13) + NCHAR(10) +
+
+      CASE scr.ObjectType WHEN ''U'' THEN ''END
+
+      ELSE BEGIN
+      PRINT ''''WARNING:  Table '' + scr.FQObjName + '' already exists.''''
+      PRINT ''''It would be best if you can drop this table and then re-execute this script to re-create it.''''
+      PRINT ''''   DROP TABLE '' + scr.FQObjName + ''''''
+      PRINT ''''If you do not drop this table, you may need to alter it manually.''''
+      PRINT ''''New:''''
+      PRINT ''''>>>>''''
+      PRINT '''''' + scr.Def + ''''''
+      PRINT ''''<<<<''''
+      PRINT ''''''''
+      PRINT ''''Existing: ''''
+      PRINT ''''>>>>''''
+      PRINT '' + ''sqlver.udfScriptTable('' + CHAR(39) + scr.FQObjName + CHAR(39) + '', NULL)'' + ''
+      PRINT ''''<<<<''''
+      PRINT ''''''''
+      END'' + NCHAR(13) + NCHAR(10)' + 
+      'ELSE '''' END +
+
+      N''GO'' + NCHAR(13) + NCHAR(10) + NCHAR(13) + NCHAR(10)
+
+    FROM
+      #scripts scr
+    ' +
+    CASE WHEN @EssentialOnly = 1 THEN 'WHERE scr.IsEssential = 1' ELSE '' END +
+    '
+    ORDER BY
+      scr.Seq'
+
+
+  EXEC sqlver.sputilResultSetAsStr
+    @SQL = @SQL,
+    @IncludeLineBreaks = 1,
+    @Result = @FinalBuf OUTPUT
+
+  SET @FinalBuf = @IntroBanner +  @FinalBuf + @PostRunSQL  
+
+  BEGIN TRY
+    --Write the script to a file (on the server)
+    DECLARE @Filename sysname
+    SET @Filename =
+         'SQLVer' + CASE WHEN @EssentialOnly = 1 THEN 'Essential' ELSE '' END + '_' +
+          RIGHT('0000' + CAST(DATEPART(year, GETDATE()) AS varchar(100)), 4) +
+          RIGHT('0' + CAST(DATEPART(month, GETDATE()) AS varchar(100)), 2) +
+          RIGHT('0' + CAST(DATEPART(day, GETDATE()) AS varchar(100)), 2) + 
+         '.sql'
+
+    EXEC sqlver.sputilWriteStringToFile
+            @FileData = @FinalBuf,
+            @FilePath = 'C:\SQLVer\',
+            @Filename = @Filename,
+            @ErrorMsg = NULL
+
+  END TRY
+  BEGIN CATCH
+    PRINT CONCAT('sqlver.spsysGenerateSQLVer could not output SQLVer script to C:\SQLVer\', @Filename, ' on the SQL server')
+  END CATCH
+
+  SET @Buf = @FinalBuf
+
+  --Print the script out.  Note that the printed output will have a CHAR(126) tilde
+  --character sequence ~-~ at the end of each 8000 characters:  you must manually remove
+  --that and the following CR/LF before executing the printed string
+  --(i.e Find the CHAR(126), then Delete Delete)
+  EXEC sqlver.sputilPrintString @Buf
+
+  DECLARE @CRLF nvarchar(6)
+  SET @CRLF = CHAR(13) + CHAR(10)
+
+  PRINT CONCAT(
+    '/*', @CRLF,
+    'WARNING:  You must search-and-replace the string printed here to replace:', @CRLF,
+    '    ~-~{CR}{LF}', @CRLF,
+    'with an empty string.', @CRLF,  @CRLF,
+    'For example, using T-SQL:', @CRLF,  @CRLF,
+    '    REPLACE(@Buf, CHAR(126) + CHAR(45) + CHAR(126) + CHAR(13) + CHAR(10), '''')', @CRLF,  @CRLF,
+    'Or using SSMS, open Find and Replace (i.e. with CTRL-H), click the .* icon (to enable regular expressions), and search for:', @CRLF,  @CRLF,
+    '    \x7e\x2d\x7e\x0d\x0a', @CRLF, @CRLF, @CRLF, @CRLF,
+    '(This is due to a limitation of the T-SQL PRINT statement that does not provide a way to print long strings or to suppress CR LF.)', @CRLF,
+    '*/'
+  )
+
+
+  IF @ReturnResultset = 1 BEGIN  
+    SELECT
+      scr.Seq,
+      scr.FQObjName,
+      scr.Def
+    FROM
+      #scripts scr
+    WHERE
+      (ISNULL(@EssentialOnly, 0) = 0 OR scr.IsEssential = 1)
+    ORDER BY
+      scr.Seq
+  END
+    
+END
+
+GO
+
+
+IF OBJECT_ID('[dtgSQLVerLogSchemaChanges]') IS NOT NULL BEGIN
+  DROP TRIGGER [dtgSQLVerLogSchemaChanges]
+END
+GO
+
+CREATE TRIGGER [dtgSQLVerLogSchemaChanges] ON DATABASE
+FOR
+  create_procedure, alter_procedure, drop_procedure,
+  create_table, alter_table, drop_table,
+  create_view, alter_view, drop_view,
+  create_function, alter_function, drop_function,
+  create_index, alter_index, drop_index,
+  create_trigger, alter_trigger, drop_trigger,
+  create_synonym, drop_synonym,
+  create_type, drop_type
+--$!SQLVer Nov 13 2024 10:12AM by sa
+
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  SET XACT_ABORT OFF;
+
+  DECLARE @Msg nvarchar(MAX)
+
+  BEGIN TRY
+    DECLARE @EventData xml
+    SET @EventData = EVENTDATA()
+
+    EXEC sqlver.spsysSchemaProcessObject @EventData = @EventData
+  END TRY
+  BEGIN CATCH
+    SET @Msg = CONCAT('Warning: SQLVer encountered an error: ', ERROR_MESSAGE())
+
+    IF (SELECT sysdb.user_access_desc FROM sys.databases sysdb WHERE sysdb.name = DB_NAME()) = 'SINGLE_USER' BEGIN
+      SET @Msg = CONCAT(
+        @Msg,
+        ' This may be due to the fact that the database is currently in SINGLE_USER mode.',
+        ' If the problem persists you could try temporarily disabling the SQLVer Database Trigger',
+        ' with: ', CHAR(13) + CHAR(10), 'DISABLE TRIGGER [dtgSQLVerLogSchemaChanges] ON DATABASE', CHAR(13) + CHAR(10),
+        ' (but be sure to re-enable with ENABLE TRIGGER [dtgSQLVerLogSchemaChanges] ON DATABASE when done.)'
+        )
+    END
+
+    PRINT @Msg
+  END CATCH
+END
+GO
+
+
+
+
+
+PRINT 'Done processing all database objects.  SQLVer is now ready for normal use.'
+PRINT ''
+/*
+WARNING:  You must search-and-replace the string printed here to replace:
+    ~-~{CR}{LF}
+with an empty string.
+
+For example, using T-SQL:
+
+    REPLACE(@Buf, CHAR(126) + CHAR(45) + CHAR(126) + CHAR(13) + CHAR(10), '')
+
+Or using SSMS, open Find and Replace (i.e. with CTRL-H), click the .* icon (to enable regular expressions), and search for:
+
+    \x7e\x2d\x7e\x0d\x0a
+
+
+
+(This is due to a limitation of the T-SQL PRINT statement that does not provide a way to print long strings or to suppress CR LF.)
+*/
