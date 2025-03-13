@@ -13,4 +13,4 @@ Original article about SQLVer published on SQL Sever Central on 1/22/2015.  Orig
 
 See:  http://www.sqlservercentral.com/articles/Version+Control+Systems+(VCS)/119029/
 
-See GitHub Wiki in this repository for installation notes.
+See [GitHub Wiki in this repository](https://github.com/DavidRueter/SQLVer/wiki) for installation notes.
