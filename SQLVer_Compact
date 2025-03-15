@@ -1,4 +1,4 @@
---SQLVerEssential generated on Mar 13 2025  3:29PM
+--SQLVerCompact generated on Mar 15 2025  9:42AM
 
 /*
 SQLVer
@@ -50,427 +50,6 @@ DECLARE @SQL nvarchar(MAX)
 SET @SQL = 'CREATE SCHEMA [sqlver] '
 EXEC(@SQL)
 END
-GO
-
-
-IF OBJECT_ID('[sqlver].[tblNumbers]') IS NULL BEGIN
-CREATE TABLE [sqlver].[tblNumbers](
-	[Number] [int] NOT NULL,
-	CONSTRAINT [pkNumbers] PRIMARY KEY CLUSTERED
-(
-  [Number] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
-) ON [PRIMARY]
-
-END
-
-      ELSE BEGIN
-      PRINT 'WARNING:  Table [sqlver].[tblNumbers] already exists.'
-      PRINT 'It would be best if you can drop this table and then re-execute this script to re-create it.'
-      PRINT '   DROP TABLE [sqlver].[tblNumbers]'
-      PRINT 'If you do not drop this table, you may need to alter it manually.'
-      PRINT 'New:'
-      PRINT '>>>>'
-      PRINT 'CREATE TABLE [sqlver].[tblNumbers](
-	[Number] [int] NOT NULL,
-	CONSTRAINT [pkNumbers] PRIMARY KEY CLUSTERED
-(
-  [Number] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
-) ON [PRIMARY]
-'
-      PRINT '<<<<'
-      PRINT ''
-      PRINT 'Existing: '
-      PRINT '>>>>'
-      PRINT sqlver.udfScriptTable('[sqlver].[tblNumbers]', NULL)
-      PRINT '<<<<'
-      PRINT ''
-      END
-GO
-
-
-IF NOT EXISTS(SELECT TOP 1 Number FROM sqlver.tblNumbers) BEGIN
-INSERT INTO sqlver.tblNumbers (Number)
-SELECT TOP 200000
-ROW_NUMBER() OVER (ORDER BY a.number, b.number)
-FROM
-  master..spt_values a
- JOIN master..spt_values b ON 1 = 1
-END
-ELSE BEGIN
-PRINT 'WARNING: SQLVer requires that table sqlver.tblNumbers contain unique sequential integers from 1 to 200000.  Fewer rows may cause unexpected results.  More rows may be OK, but may degrade performance of certain functions.'
-END
-
-GO
-
-
-IF OBJECT_ID('[sqlver].[sputilPrintString]') IS NOT NULL BEGIN
-  DROP PROCEDURE [sqlver].[sputilPrintString]
-END
-GO
-
-CREATE PROCEDURE [sqlver].[sputilPrintString]
-@Buf varchar(MAX),
-@Help bit = 0
-
-WITH EXECUTE AS OWNER
---$!SQLVer Sep 13 2022 12:46PM by sa
---©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
- --See:  https://github.com/davidrueter/sqlver)
---Note: Comments after $!SQLVer and before AS are subject to automatic removal
-AS
-BEGIN
-  IF @Help = 1 BEGIN
-
-    DECLARE @CRLF nvarchar(5)
-    SET @CRLF = CHAR(13) + CHAR(10)
-
-    PRINT
-      CONCAT(
-        'WARNING:  You must search-and-replace the string printed here to replace:', @CRLF,
-        '    ~-~{CR}{LF}', @CRLF,
-        'with an empty string.', @CRLF,  @CRLF,
-        'For example, using T-SQL:', @CRLF,  @CRLF,
-        '    REPLACE(@Buf, CHAR(126) + CHAR(45) + CHAR(126) + CHAR(13) + CHAR(10), '''')', @CRLF,  @CRLF,
-        'Or using SSMS, open Find and Replace (i.e. with CTRL-H), click the .* icon (to enable regular expressions), and search for:', @CRLF,  @CRLF,
-        '    \x7e\x2d\x7e\x0d\x0a', @CRLF, @CRLF,
-        '(This is due to a limitation of the T-SQL PRINT statement that does not provide a way to print long strings or to suppress CR LF.)', @CRLF,
-        '********************************************'
-      )
-  END
-
-  DECLARE @S varchar(MAX)
-  DECLARE @P int
-  SET @P = 1
-  
-  WHILE @P < LEN(@Buf + 'x') - 1 BEGIN
-    SET @S = SUBSTRING(@Buf, @P, 4000)
-    PRINT CONCAT(@S, CHAR(126), '-', CHAR(126))  --CHAR(126) is tilde character
-    SET @P = @P + 4000
-  END
-
-END
-
-GO
-
-
-IF OBJECT_ID('[sqlver].[sputilResultSetAsStr]') IS NOT NULL BEGIN
-  DROP PROCEDURE [sqlver].[sputilResultSetAsStr]
-END
-GO
-
-CREATE PROCEDURE [sqlver].[sputilResultSetAsStr]
-@SQL nvarchar(MAX),
-@ResultPrefix nvarchar(MAX) = '',
-@ResultSuffix nvarchar(MAX) = '',
-@TrimTrailSuffix bit = 1,
-@IncludeLineBreaks bit = 0,
-@Result nvarchar(MAX) OUTPUT
-
-WITH EXECUTE AS OWNER
---$!SQLVer Nov  7 2020  5:10AM by sa
---©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
- --See:  https://github.com/davidrueter/sqlver)
---Note: Comments after $!SQLVer and before AS are subject to automatic removal
-AS
-BEGIN
-  SET NOCOUNT ON
-  --note:  statement in @SQL must return only a single column.
-
-  DECLARE @ThisValue nvarchar(MAX)
-  DECLARE @CRLF nvarchar(5)
-  SET @CRLF = NCHAR(13) + NCHAR(10)
-
-  DECLARE @tvValues TABLE (Seq int IDENTITY PRIMARY KEY, ThisValue varchar(MAX))
-  INSERT INTO @tvValues (ThisValue)
-  EXEC sp_executesql @statement=@SQL
-  
-  DECLARE curRes CURSOR LOCAL STATIC FOR
-  SELECT ThisValue FROM @tvValues ORDER BY Seq
-
-  OPEN curRes
-  
-  SET @Result = ''
-  FETCH curRes INTO @ThisValue
-  WHILE @@FETCH_STATUS = 0 BEGIN
-    SET @Result = @Result + ISNULL(@ResultPrefix, '') + @ThisValue + ISNULL(@ResultSuffix, '') +
-      CASE WHEN @IncludeLineBreaks = 1 THEN @CRLF ELSE '' END
-    FETCH curRes INTO @ThisValue
-  END
-  CLOSE curRes
-  DEALLOCATE curRes
-    
-  WHILE @TrimTrailSuffix = 1 AND LEN(@ResultSuffix) > 0 AND PATINDEX('%' + REVERSE(@ResultSuffix) + '%', REVERSE(@Result)) = 1 BEGIN
-    SET @Result = SUBSTRING(@Result, 1, (LEN(@Result + 'x') - 1) - (LEN(@ResultSuffix + 'x') - 1))  
-  END
-END
-
-GO
-
-
-IF OBJECT_ID('[sqlver].[udfFindInSQL]') IS NOT NULL BEGIN
-  DROP FUNCTION [sqlver].[udfFindInSQL]
-END
-GO
-
-CREATE FUNCTION [sqlver].[udfFindInSQL](
-@TargetStr nvarchar(MAX),
-@SQL nvarchar(MAX),
-@StartPos int)
-RETURNS int
-
-WITH EXECUTE AS OWNER
---$!SQLVer Nov  7 2020  5:10AM by sa
---©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
- --See:  https://github.com/davidrueter/sqlver)
---Note: Comments after $!SQLVer and before AS are subject to automatic removal
-AS
-BEGIN
-  DECLARE @Chunk nvarchar(MAX)
-  DECLARE @Found bit
-  DECLARE @P int
-  DECLARE @Delims varchar(40)
-  SET @Delims =  ' ' + ';' + CHAR(13) + CHAR(10) + CHAR(9)
-  
-  SET @Found = 0        
-  SET @P = 0        
-  
-  IF @StartPos IS NULL BEGIN
-    SET @StartPos = 0
-  END
-  
-  SET @SQL = @SQL + CHAR(13)
-  
-  SET @Chunk = RIGHT(@SQL, LEN(@SQL) - @StartPos)
-  WHILE (@Found = 0) AND (@P IS NOT NULL) BEGIN
-    SET @P = PATINDEX('%' + @TargetStr + '[' + @Delims + ']%', @Chunk)
-
-    IF @P = 0 BEGIN
-      --Didn't find @TargetStr immediately followed by a delimiter.
-      --Try immediately followed by inline comment.
-      SET @P = PATINDEX('%' + @TargetStr + '--%', @Chunk)
-    END
-                
-    IF @P = 0 BEGIN
-      --Didn't find @TargetStr immediately followed by a delimiter or inline comment.
-      --Try immediately followed by block comment.
-      SET @P = PATINDEX('%' + @TargetStr + '/*%', @Chunk)
-    END      
-
-    IF (@P > 0) BEGIN
-      IF 
-        --sqlver.udfIsInComment(@StartPos + @P, @SQL) = 0 AND
-        --udfSQLTerm checks for comments
-        sqlver.udfSQLTerm(@StartPos + @P, @SQL) LIKE 'Word:%' BEGIN
-        SET @Found = 1
-        BREAK
-      END
-      ELSE BEGIN
-        SET @StartPos = @StartPos + @P
-        SET @Chunk = RIGHT(@SQL, LEN(@SQL) - @StartPos)
-      END
-    END
-    ELSE BEGIN
-      SET @P = NULL
-    END              
-  END
-  
-  RETURN ISNULL(@StartPos + @P, 0)
-END
-
-GO
-
-
-IF OBJECT_ID('[sqlver].[udfHashBytesNMax]') IS NOT NULL BEGIN
-  DROP FUNCTION [sqlver].[udfHashBytesNMax]
-END
-GO
-
-CREATE FUNCTION [sqlver].[udfHashBytesNMax](@Algorithm sysname = 'SHA2_256', @Input nvarchar(MAX))
-RETURNS varbinary(MAX)
---$!SQLVer Nov  7 2020  5:10AM by sa
-
---©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
- --See:  https://github.com/davidrueter/sqlver)
---Note: Comments after $!SQLVer and before AS are subject to automatic removal
-AS
-BEGIN
-  IF @Algorithm IS NULL BEGIN
-    SET @Algorithm = 'SHA2_256'
-  END
-
-  DECLARE @Result varbinary(MAX)
-
-  DECLARE @Chunk int
-  DECLARE @ChunkSize int
-  DECLARE @ChunkInput nvarchar(MAX)
-  
-  SET @ChunkSize = 4000
-  SET @Chunk = 1
-  SET @Result = CAST('' AS varbinary(MAX))
-
-  WHILE @Chunk * @ChunkSize < LEN(@Input + 'x') - 1 BEGIN
-    --Append the hash for each chunk
-    SET @ChunkInput = SUBSTRING(@Input, ((@Chunk - 1) * @ChunkSize) + 1, @ChunkSize)
-    SET @Result = @Result + HASHBYTES(@Algorithm, @ChunkInput)
-    SET @Chunk = @Chunk + 1
-  END
-
-  --Append the hash for the final partial chunk
-  SET @ChunkInput = RIGHT(@Input, LEN(@Input + 'x') - 1 - ((@Chunk - 1) * @ChunkSize))
-  SET @Result = @Result + HASHBYTES(@Algorithm, @CHunkInput)
-
-  IF @Chunk > 1 BEGIN
-    --If we have appended more than one hash, hash the hash.
-    --We want to return just normal 160 bit (or whatever the @Algorithm calls for) value,
-    --but at the moment we have any number of concatenated hash values in @Result.
-    --We therefore need to hash the whole @Result buffer. 
-    SET @Result = HASHBYTES(@Algorithm, @Result)    
-  END
-  
-  RETURN @Result
-END
-
-GO
-
-
-IF OBJECT_ID('[sqlver].[udfIsInComment]') IS NOT NULL BEGIN
-  DROP FUNCTION [sqlver].[udfIsInComment]
-END
-GO
-
-CREATE FUNCTION [sqlver].[udfIsInComment](
-@CharIndex int,
-@SQL nvarchar(MAX))
-RETURNS BIT
-
-WITH EXECUTE AS OWNER
---$!SQLVer Nov  7 2020  5:10AM by sa
---©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
- --See:  https://github.com/davidrueter/sqlver)
---Note: Comments after $!SQLVer and before AS are subject to automatic removal
-AS
-BEGIN
-  DECLARE @Result bit
-  
-  IF @CharIndex < 3 BEGIN
-    SET @Result = 0
-  END
-  ELSE IF @CharIndex > LEN(@SQL + 'x') - 1 BEGIN
-    SET @Result = NULL
-  END
-  ELSE BEGIN
-    DECLARE @InComment bit
-    DECLARE @InBlockComment bit
-    
-    DECLARE @P int
-    DECLARE @C char(1)
-    DECLARE @C2 char(1)
-
-    SET @InComment = 0
-    SET @InBlockComment = 0
-    SET @P = 1
-    WHILE @P <= LEN(@SQL + 'x') - 1 - 1 BEGIN
-      SET @C = SUBSTRING(@SQL, @P, 1)
-      SET @C2 = SUBSTRING(@SQL, @P+1, 1)
-    
-      IF @InBlockComment = 1 BEGIN
-        IF @C + @C2 = '*/' SET @InBlockComment = 0
-      END
-      ELSE IF @InComment = 1 BEGIN
-        IF @C IN (CHAR(13), CHAR(10)) SET @InComment = 0
-      END
-      ELSE IF @C + @C2 = '/*' BEGIN
-        SET @InBlockComment = 1
-      END
-      ELSE IF @C + @C2 = '--' BEGIN
-        SET @InComment = 1
-      END
-      
-      IF @P + 2 >= @CharIndex BEGIN
-        BREAK
-      END
-      ELSE BEGIN    
-        SET @P = @P + 1  
-      END
-    END
-    
-   SET @Result = CASE WHEN ((@InComment = 1) OR (@InBlockComment = 1)) THEN 1 ELSE 0 END
-    
-  END
-  
-  RETURN @Result
-END
-
-GO
-
-
-IF OBJECT_ID('[sqlver].[udfLTRIMSuper]') IS NOT NULL BEGIN
-  DROP FUNCTION [sqlver].[udfLTRIMSuper]
-END
-GO
-
-CREATE FUNCTION [sqlver].[udfLTRIMSuper](@S varchar(MAX))
-RETURNS varchar(MAX)
---$!SQLVer Nov  7 2020  5:10AM by sa
-
---©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
- --See:  https://github.com/davidrueter/sqlver)
---Note: Comments after $!SQLVer and before AS are subject to automatic removal
-AS
-BEGIN
-  DECLARE @Result varchar(MAX)
-  DECLARE @P int
-  SET @P = 1
-  WHILE @P <= LEN(@S + 'x') - 1 BEGIN
-    IF SUBSTRING(@S, @P, 1) IN  (' ', CHAR(9), CHAR(10), CHAR(13)) BEGIN
-      SET @P = @P + 1
-    END
-    ELSE BEGIN
-      BREAK
-    END
-  END
-  
-  SET @Result = RIGHT(@S, LEN(@S + 'x') - 1 - @P + 1)
-  
-  RETURN @Result  
-END
-
-GO
-
-
-IF OBJECT_ID('[sqlver].[udfRTRIMSuper]') IS NOT NULL BEGIN
-  DROP FUNCTION [sqlver].[udfRTRIMSuper]
-END
-GO
-
-CREATE FUNCTION [sqlver].[udfRTRIMSuper](@S varchar(MAX))
-RETURNS varchar(MAX)
---$!SQLVer Nov  7 2020  5:09AM by sa
-
---©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
- --See:  https://github.com/davidrueter/sqlver)
---Note: Comments after $!SQLVer and before AS are subject to automatic removal
-AS
-BEGIN
-  DECLARE @Result varchar(MAX)
-  DECLARE @P int
-  SET @P = LEN(@S + 'x') - 1
-  WHILE @P >= 1 BEGIN
-    IF ISNULL(SUBSTRING(@S, @P, 1), ' ') IN (' ', CHAR(9), CHAR(10), CHAR(13)) BEGIN
-      SET @P = @P - 1
-    END
-    ELSE BEGIN
-      BREAK
-    END
-  END
-  
-  SET @Result = LEFT(@S, @P)
-  
-  RETURN @Result  
-END
-
 GO
 
 
@@ -925,6 +504,435 @@ BEGIN
   END
 
   RETURN @Sql
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[tblNumbers]') IS NULL BEGIN
+CREATE TABLE [sqlver].[tblNumbers](
+	[Number] [int] NOT NULL,
+	CONSTRAINT [pkNumbers] PRIMARY KEY CLUSTERED
+(
+  [Number] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+END
+
+      ELSE BEGIN
+      IF CONVERT(varchar(MAX), 
+       sqlver.udfHashBytesNMax(DEFAULT,
+        sqlver.udfScriptTable('[sqlver].[tblNumbers]', DEFAULT)
+       )
+       , 1) <> '0x72CEF086C367EBB57C7E1A6A94161801C8C99CE035DA3C8F918C79059DA15854' BEGIN
+        PRINT 'WARNING:  Table [sqlver].[tblNumbers] already exists.'
+        PRINT 'It would be best if you can drop this table and then re-execute this script to re-create it.'
+        PRINT '   DROP TABLE [sqlver].[tblNumbers]'
+        PRINT 'If you do not drop this table, you may need to alter it manually.'
+        PRINT 'New:'
+        PRINT '>>>>'
+        PRINT 'CREATE TABLE [sqlver].[tblNumbers](
+	[Number] [int] NOT NULL,
+	CONSTRAINT [pkNumbers] PRIMARY KEY CLUSTERED
+(
+  [Number] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+) ON [PRIMARY]
+'
+        PRINT '<<<<'
+        PRINT ''
+        PRINT 'Existing: '
+        PRINT '>>>>'
+        PRINT sqlver.udfScriptTable('[sqlver].[tblNumbers]', NULL)
+        PRINT '<<<<'
+        PRINT ''
+      END
+      END
+GO
+
+
+IF NOT EXISTS(SELECT TOP 1 Number FROM sqlver.tblNumbers) BEGIN
+INSERT INTO sqlver.tblNumbers (Number)
+SELECT TOP 200000
+ROW_NUMBER() OVER (ORDER BY a.number, b.number)
+FROM
+  master..spt_values a
+ JOIN master..spt_values b ON 1 = 1
+END
+ELSE BEGIN
+IF ISNULL((SELECT COUNT(*) FROM sqlver.tblNumbers), 0) <> 200000 BEGIN
+PRINT 'WARNING: SQLVer requires that table sqlver.tblNumbers contain unique sequential integers from 1 to 200000.  Fewer rows may cause unexpected results.  More rows may be OK, but may degrade performance of certain functions.'
+END
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[sputilPrintString]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[sputilPrintString]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[sputilPrintString]
+@Buf varchar(MAX),
+@Help bit = 0
+
+WITH EXECUTE AS OWNER
+--$!SQLVer Sep 13 2022 12:46PM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  IF @Help = 1 BEGIN
+
+    DECLARE @CRLF nvarchar(5)
+    SET @CRLF = CHAR(13) + CHAR(10)
+
+    PRINT
+      CONCAT(
+        'WARNING:  You must search-and-replace the string printed here to replace:', @CRLF,
+        '    ~-~{CR}{LF}', @CRLF,
+        'with an empty string.', @CRLF,  @CRLF,
+        'For example, using T-SQL:', @CRLF,  @CRLF,
+        '    REPLACE(@Buf, CHAR(126) + CHAR(45) + CHAR(126) + CHAR(13) + CHAR(10), '''')', @CRLF,  @CRLF,
+        'Or using SSMS, open Find and Replace (i.e. with CTRL-H), click the .* icon (to enable regular expressions), and search for:', @CRLF,  @CRLF,
+        '    \x7e\x2d\x7e\x0d\x0a', @CRLF, @CRLF,
+        '(This is due to a limitation of the T-SQL PRINT statement that does not provide a way to print long strings or to suppress CR LF.)', @CRLF,
+        '********************************************'
+      )
+  END
+
+  DECLARE @S varchar(MAX)
+  DECLARE @P int
+  SET @P = 1
+  
+  WHILE @P < LEN(@Buf + 'x') - 1 BEGIN
+    SET @S = SUBSTRING(@Buf, @P, 4000)
+    PRINT CONCAT(@S, CHAR(126), '-', CHAR(126))  --CHAR(126) is tilde character
+    SET @P = @P + 4000
+  END
+
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[sputilResultSetAsStr]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[sputilResultSetAsStr]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[sputilResultSetAsStr]
+@SQL nvarchar(MAX),
+@ResultPrefix nvarchar(MAX) = '',
+@ResultSuffix nvarchar(MAX) = '',
+@TrimTrailSuffix bit = 1,
+@IncludeLineBreaks bit = 0,
+@Result nvarchar(MAX) OUTPUT
+
+WITH EXECUTE AS OWNER
+--$!SQLVer Nov  7 2020  5:10AM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  SET NOCOUNT ON
+  --note:  statement in @SQL must return only a single column.
+
+  DECLARE @ThisValue nvarchar(MAX)
+  DECLARE @CRLF nvarchar(5)
+  SET @CRLF = NCHAR(13) + NCHAR(10)
+
+  DECLARE @tvValues TABLE (Seq int IDENTITY PRIMARY KEY, ThisValue varchar(MAX))
+  INSERT INTO @tvValues (ThisValue)
+  EXEC sp_executesql @statement=@SQL
+  
+  DECLARE curRes CURSOR LOCAL STATIC FOR
+  SELECT ThisValue FROM @tvValues ORDER BY Seq
+
+  OPEN curRes
+  
+  SET @Result = ''
+  FETCH curRes INTO @ThisValue
+  WHILE @@FETCH_STATUS = 0 BEGIN
+    SET @Result = @Result + ISNULL(@ResultPrefix, '') + @ThisValue + ISNULL(@ResultSuffix, '') +
+      CASE WHEN @IncludeLineBreaks = 1 THEN @CRLF ELSE '' END
+    FETCH curRes INTO @ThisValue
+  END
+  CLOSE curRes
+  DEALLOCATE curRes
+    
+  WHILE @TrimTrailSuffix = 1 AND LEN(@ResultSuffix) > 0 AND PATINDEX('%' + REVERSE(@ResultSuffix) + '%', REVERSE(@Result)) = 1 BEGIN
+    SET @Result = SUBSTRING(@Result, 1, (LEN(@Result + 'x') - 1) - (LEN(@ResultSuffix + 'x') - 1))  
+  END
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfFindInSQL]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfFindInSQL]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfFindInSQL](
+@TargetStr nvarchar(MAX),
+@SQL nvarchar(MAX),
+@StartPos int)
+RETURNS int
+
+WITH EXECUTE AS OWNER
+--$!SQLVer Nov  7 2020  5:10AM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  DECLARE @Chunk nvarchar(MAX)
+  DECLARE @Found bit
+  DECLARE @P int
+  DECLARE @Delims varchar(40)
+  SET @Delims =  ' ' + ';' + CHAR(13) + CHAR(10) + CHAR(9)
+  
+  SET @Found = 0        
+  SET @P = 0        
+  
+  IF @StartPos IS NULL BEGIN
+    SET @StartPos = 0
+  END
+  
+  SET @SQL = @SQL + CHAR(13)
+  
+  SET @Chunk = RIGHT(@SQL, LEN(@SQL) - @StartPos)
+  WHILE (@Found = 0) AND (@P IS NOT NULL) BEGIN
+    SET @P = PATINDEX('%' + @TargetStr + '[' + @Delims + ']%', @Chunk)
+
+    IF @P = 0 BEGIN
+      --Didn't find @TargetStr immediately followed by a delimiter.
+      --Try immediately followed by inline comment.
+      SET @P = PATINDEX('%' + @TargetStr + '--%', @Chunk)
+    END
+                
+    IF @P = 0 BEGIN
+      --Didn't find @TargetStr immediately followed by a delimiter or inline comment.
+      --Try immediately followed by block comment.
+      SET @P = PATINDEX('%' + @TargetStr + '/*%', @Chunk)
+    END      
+
+    IF (@P > 0) BEGIN
+      IF 
+        --sqlver.udfIsInComment(@StartPos + @P, @SQL) = 0 AND
+        --udfSQLTerm checks for comments
+        sqlver.udfSQLTerm(@StartPos + @P, @SQL) LIKE 'Word:%' BEGIN
+        SET @Found = 1
+        BREAK
+      END
+      ELSE BEGIN
+        SET @StartPos = @StartPos + @P
+        SET @Chunk = RIGHT(@SQL, LEN(@SQL) - @StartPos)
+      END
+    END
+    ELSE BEGIN
+      SET @P = NULL
+    END              
+  END
+  
+  RETURN ISNULL(@StartPos + @P, 0)
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfHashBytesNMax]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfHashBytesNMax]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfHashBytesNMax](@Algorithm sysname = 'SHA2_256', @Input nvarchar(MAX))
+RETURNS varbinary(MAX)
+--$!SQLVer Nov  7 2020  5:10AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  IF @Algorithm IS NULL BEGIN
+    SET @Algorithm = 'SHA2_256'
+  END
+
+  DECLARE @Result varbinary(MAX)
+
+  DECLARE @Chunk int
+  DECLARE @ChunkSize int
+  DECLARE @ChunkInput nvarchar(MAX)
+  
+  SET @ChunkSize = 4000
+  SET @Chunk = 1
+  SET @Result = CAST('' AS varbinary(MAX))
+
+  WHILE @Chunk * @ChunkSize < LEN(@Input + 'x') - 1 BEGIN
+    --Append the hash for each chunk
+    SET @ChunkInput = SUBSTRING(@Input, ((@Chunk - 1) * @ChunkSize) + 1, @ChunkSize)
+    SET @Result = @Result + HASHBYTES(@Algorithm, @ChunkInput)
+    SET @Chunk = @Chunk + 1
+  END
+
+  --Append the hash for the final partial chunk
+  SET @ChunkInput = RIGHT(@Input, LEN(@Input + 'x') - 1 - ((@Chunk - 1) * @ChunkSize))
+  SET @Result = @Result + HASHBYTES(@Algorithm, @CHunkInput)
+
+  IF @Chunk > 1 BEGIN
+    --If we have appended more than one hash, hash the hash.
+    --We want to return just normal 160 bit (or whatever the @Algorithm calls for) value,
+    --but at the moment we have any number of concatenated hash values in @Result.
+    --We therefore need to hash the whole @Result buffer. 
+    SET @Result = HASHBYTES(@Algorithm, @Result)    
+  END
+  
+  RETURN @Result
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfIsInComment]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfIsInComment]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfIsInComment](
+@CharIndex int,
+@SQL nvarchar(MAX))
+RETURNS BIT
+
+WITH EXECUTE AS OWNER
+--$!SQLVer Nov  7 2020  5:10AM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  DECLARE @Result bit
+  
+  IF @CharIndex < 3 BEGIN
+    SET @Result = 0
+  END
+  ELSE IF @CharIndex > LEN(@SQL + 'x') - 1 BEGIN
+    SET @Result = NULL
+  END
+  ELSE BEGIN
+    DECLARE @InComment bit
+    DECLARE @InBlockComment bit
+    
+    DECLARE @P int
+    DECLARE @C char(1)
+    DECLARE @C2 char(1)
+
+    SET @InComment = 0
+    SET @InBlockComment = 0
+    SET @P = 1
+    WHILE @P <= LEN(@SQL + 'x') - 1 - 1 BEGIN
+      SET @C = SUBSTRING(@SQL, @P, 1)
+      SET @C2 = SUBSTRING(@SQL, @P+1, 1)
+    
+      IF @InBlockComment = 1 BEGIN
+        IF @C + @C2 = '*/' SET @InBlockComment = 0
+      END
+      ELSE IF @InComment = 1 BEGIN
+        IF @C IN (CHAR(13), CHAR(10)) SET @InComment = 0
+      END
+      ELSE IF @C + @C2 = '/*' BEGIN
+        SET @InBlockComment = 1
+      END
+      ELSE IF @C + @C2 = '--' BEGIN
+        SET @InComment = 1
+      END
+      
+      IF @P + 2 >= @CharIndex BEGIN
+        BREAK
+      END
+      ELSE BEGIN    
+        SET @P = @P + 1  
+      END
+    END
+    
+   SET @Result = CASE WHEN ((@InComment = 1) OR (@InBlockComment = 1)) THEN 1 ELSE 0 END
+    
+  END
+  
+  RETURN @Result
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfLTRIMSuper]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfLTRIMSuper]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfLTRIMSuper](@S varchar(MAX))
+RETURNS varchar(MAX)
+--$!SQLVer Nov  7 2020  5:10AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  DECLARE @Result varchar(MAX)
+  DECLARE @P int
+  SET @P = 1
+  WHILE @P <= LEN(@S + 'x') - 1 BEGIN
+    IF SUBSTRING(@S, @P, 1) IN  (' ', CHAR(9), CHAR(10), CHAR(13)) BEGIN
+      SET @P = @P + 1
+    END
+    ELSE BEGIN
+      BREAK
+    END
+  END
+  
+  SET @Result = RIGHT(@S, LEN(@S + 'x') - 1 - @P + 1)
+  
+  RETURN @Result  
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[udfRTRIMSuper]') IS NOT NULL BEGIN
+  DROP FUNCTION [sqlver].[udfRTRIMSuper]
+END
+GO
+
+CREATE FUNCTION [sqlver].[udfRTRIMSuper](@S varchar(MAX))
+RETURNS varchar(MAX)
+--$!SQLVer Nov  7 2020  5:09AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  DECLARE @Result varchar(MAX)
+  DECLARE @P int
+  SET @P = LEN(@S + 'x') - 1
+  WHILE @P >= 1 BEGIN
+    IF ISNULL(SUBSTRING(@S, @P, 1), ' ') IN (' ', CHAR(9), CHAR(10), CHAR(13)) BEGIN
+      SET @P = @P - 1
+    END
+    ELSE BEGIN
+      BREAK
+    END
+  END
+  
+  SET @Result = LEFT(@S, @P)
+  
+  RETURN @Result  
 END
 
 GO
@@ -1671,13 +1679,18 @@ CREATE NONCLUSTERED INDEX ixSchemaLog_ObjectName_SchemaName ON [sqlver].[tblSche
 END
 
       ELSE BEGIN
-      PRINT 'WARNING:  Table [sqlver].[tblSchemaLog] already exists.'
-      PRINT 'It would be best if you can drop this table and then re-execute this script to re-create it.'
-      PRINT '   DROP TABLE [sqlver].[tblSchemaLog]'
-      PRINT 'If you do not drop this table, you may need to alter it manually.'
-      PRINT 'New:'
-      PRINT '>>>>'
-      PRINT 'CREATE TABLE [sqlver].[tblSchemaLog](
+      IF CONVERT(varchar(MAX), 
+       sqlver.udfHashBytesNMax(DEFAULT,
+        sqlver.udfScriptTable('[sqlver].[tblSchemaLog]', DEFAULT)
+       )
+       , 1) <> '0xFB27D0BED4D71A6B4E8873C1A56B7CFA56CD55F0ACF76443F373548D9BE7799B' BEGIN
+        PRINT 'WARNING:  Table [sqlver].[tblSchemaLog] already exists.'
+        PRINT 'It would be best if you can drop this table and then re-execute this script to re-create it.'
+        PRINT '   DROP TABLE [sqlver].[tblSchemaLog]'
+        PRINT 'If you do not drop this table, you may need to alter it manually.'
+        PRINT 'New:'
+        PRINT '>>>>'
+        PRINT 'CREATE TABLE [sqlver].[tblSchemaLog](
 	[SchemaLogId] [int] IDENTITY(1,1) NOT NULL,
 	[SPID] [smallint] NULL,
 	[EventType] [varchar](50) NULL,
@@ -1704,13 +1717,14 @@ CREATE NONCLUSTERED INDEX ixSchemaLog_ObjectName_SchemaName ON [sqlver].[tblSche
   [ObjectName] ASC,   [SchemaName] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 '
-      PRINT '<<<<'
-      PRINT ''
-      PRINT 'Existing: '
-      PRINT '>>>>'
-      PRINT sqlver.udfScriptTable('[sqlver].[tblSchemaLog]', NULL)
-      PRINT '<<<<'
-      PRINT ''
+        PRINT '<<<<'
+        PRINT ''
+        PRINT 'Existing: '
+        PRINT '>>>>'
+        PRINT sqlver.udfScriptTable('[sqlver].[tblSchemaLog]', NULL)
+        PRINT '<<<<'
+        PRINT ''
+      END
       END
 GO
 
@@ -1783,13 +1797,18 @@ CREATE NONCLUSTERED INDEX ixSchemaManifest_ObjectName_StillExists_ObjectType ON 
 END
 
       ELSE BEGIN
-      PRINT 'WARNING:  Table [sqlver].[tblSchemaManifest] already exists.'
-      PRINT 'It would be best if you can drop this table and then re-execute this script to re-create it.'
-      PRINT '   DROP TABLE [sqlver].[tblSchemaManifest]'
-      PRINT 'If you do not drop this table, you may need to alter it manually.'
-      PRINT 'New:'
-      PRINT '>>>>'
-      PRINT 'CREATE TABLE [sqlver].[tblSchemaManifest](
+      IF CONVERT(varchar(MAX), 
+       sqlver.udfHashBytesNMax(DEFAULT,
+        sqlver.udfScriptTable('[sqlver].[tblSchemaManifest]', DEFAULT)
+       )
+       , 1) <> '0x1EC68A73A2FD3F5B906E6AD8047F023A08EDABB2FE62FA9D5F34DE94BE5AA955' BEGIN
+        PRINT 'WARNING:  Table [sqlver].[tblSchemaManifest] already exists.'
+        PRINT 'It would be best if you can drop this table and then re-execute this script to re-create it.'
+        PRINT '   DROP TABLE [sqlver].[tblSchemaManifest]'
+        PRINT 'If you do not drop this table, you may need to alter it manually.'
+        PRINT 'New:'
+        PRINT '>>>>'
+        PRINT 'CREATE TABLE [sqlver].[tblSchemaManifest](
 	[SchemaManifestId] [int] IDENTITY(1,1) NOT NULL,
 	[ObjectName] [sysname] NOT NULL,
 	[SchemaName] [sysname] NOT NULL,
@@ -1853,13 +1872,14 @@ CREATE NONCLUSTERED INDEX ixSchemaManifest_ObjectName_StillExists_ObjectType ON 
 (
   [SchemaManifestId],   [SchemaName])WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 '
-      PRINT '<<<<'
-      PRINT ''
-      PRINT 'Existing: '
-      PRINT '>>>>'
-      PRINT sqlver.udfScriptTable('[sqlver].[tblSchemaManifest]', NULL)
-      PRINT '<<<<'
-      PRINT ''
+        PRINT '<<<<'
+        PRINT ''
+        PRINT 'Existing: '
+        PRINT '>>>>'
+        PRINT sqlver.udfScriptTable('[sqlver].[tblSchemaManifest]', NULL)
+        PRINT '<<<<'
+        PRINT ''
+      END
       END
 GO
 
@@ -2142,9 +2162,13 @@ CREATE PROCEDURE [sqlver].[spsysSchemaProcessObject]
 @ForceSchemaBinding bit = NULL,
 @ForceExecuteAs bit = NULL,
 @SkipExec bit = 0
+--$!SQLVer Mar 15 2025  8:27AM by sa
+
+--©Copyright 2006-2025 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
 AS
 BEGIN
-  --You may set @Debug = 1 to output verbose debugging messages from this trigger.
   DECLARE @Debug bit
   SET @Debug = 0
 
@@ -2255,25 +2279,25 @@ BEGIN
     --Schema-specific messages
     (
     'sqlver',
-'--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+'--©Copyright 2006-2025 by David Rueter (drueter@assyst.com)
  --See:  https://github.com/davidrueter/sqlver)'
     ),
 
     (
     'sdom',
-'--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+'--©Copyright 2006-2025 by David Rueter (drueter@assyst.com)
  --See:  https://github.com/davidrueter/sqldom)'
     ),
 
     (
     'theas',
-'--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+'--©Copyright 2006-2025 by David Rueter (drueter@assyst.com)
  --See:  https://github.com/davidrueter/theas)'
     ),
 
     (
     'sws',
-'--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+'--©Copyright 2006-2025 by David Rueter (drueter@assyst.com)
  --SWS (SQLWebShim) is a deprecated way of using SQL to generate HTML responses'
     )
 
@@ -2282,7 +2306,7 @@ BEGIN
     VALUES
     (
     'opsstream',
-'--©Copyright 2006-2019 by David Rueter, Automated Operations, Inc.
+'--©Copyright 2006-2025 by David Rueter, Automated Operations, Inc.
 --May be held, used or transmitted only pursuant to an in-force licensing agreement with Automated Operations, Inc.
 --Contact info@opsstream.com / 800-964-3646 / 949-264-1555'
     )
@@ -2357,11 +2381,15 @@ BEGIN
     DECLARE @P int
     DECLARE @P1 int
     DECLARE @P2 int
+    DECLARE @P3 int
     DECLARE @PWithClause int
     DECLARE @WithClause nvarchar(MAX)
     DECLARE @PAs int
     DECLARE @PMarker int
     DECLARE @PMarker2 int
+
+    DECLARE @WasCreateOrAlter bit
+    SET @WasCreateOrAlter = 0
 
     DECLARE @SVMarker nvarchar(MAX)
     SET @SVMarker = '--$!' + 'SQLVer ' + ISNULL(CAST(GETDATE() AS varchar(100)), '') + ISNULL(' by ' + SYSTEM_USER, '') + @CRLF
@@ -2525,13 +2553,21 @@ BEGIN
     SET @QualifiedName = QUOTENAME(@DatabaseName) + '.' + QUOTENAME(@SchemaName) + '.' + QUOTENAME(@ObjectName)  
 
     --Switch ALTER to CREATE for hash
-    --Find the first ALTER that is in uncommented SQL code
-
     SET @P = sqlver.udfFindInSQL('ALTER', @SQLFromEvent, 0)
     SET @P2 = sqlver.udfFindInSQL('CREATE', @SQLFromEvent, 0)
+    SET @P3 = sqlver.udfFindInSQL('CREATE OR ALTER', @SQLFromEvent, 0)
 
-    IF @P > 0 AND (NULLIF(@P2, 0) IS NULL OR @P2 > @P) BEGIN
-      SET @SQLFromEvent = STUFF(@SQLFromEvent, @P, LEN('ALTER'), 'CREATE')
+    IF @P3 > 0 BEGIN
+      IF @P3 = @P2 AND (NULLIF(@P, 0) IS NULL OR @P > @P3) BEGIN
+        SET @WasCreateOrAlter = 1
+        SET @P = @P3
+        SET @SQLFromEvent = STUFF(@SQLFromEvent, @P, LEN('CREATE OR ALTER'), 'CREATE')
+      END 
+    END
+    ELSE BEGIN
+      IF @P > 0 AND (NULLIF(@P2, 0) IS NULL OR @P2 > @P) BEGIN
+        SET @SQLFromEvent = STUFF(@SQLFromEvent, @P, LEN('ALTER'), 'CREATE')
+      END
     END
 
     --fetch appropriate copyright message
@@ -2852,9 +2888,7 @@ BEGIN
 
       END
 
-    --xxxxxxxxxxxxxxxxxx
 
-      
       /*
       SQLVer looks for special block comments that begin with /ver
 
@@ -2883,15 +2917,10 @@ BEGIN
 
         DECLARE @SQLBeforeComment nvarchar(MAX)
         DECLARE @SQLAfterComment nvarchar(MAX)
-        SET @SQLBeforeComment = LEFT(@SQLStripped, @P - 1)
-        SET @SQLAfterComment = SUBSTRING(@SQLStripped, @P + LEN(@Marker) + LEN(@ThisComment + 'x') + LEN('/**/') - 1, LEN(@SQLStripped))
 
-        --Remove extraneous CRLF
-        IF RIGHT(@SQLBeforeComment, LEN(@CRLF + 'x') - 1) = @CRLF AND
-            LEFT(@SQLAfterComment, LEN(@CRLF + 'x') - 1) = @CRLF BEGIN
-          SET @SQLAfterComment = SUBSTRING(@SQLAfterComment, LEN(@CRLF + 'x') - 1 + 1, LEN(@SQLAfterComment))
-        END
-         
+        SET @SQLBeforeComment = sqlver.udfReplaceRight(LEFT(@SQLStripped, @P - 1), CHAR(13)+CHAR(10), '', 0)
+        SET @SQLAfterComment = sqlver.udfReplaceLeft(SUBSTRING(@SQLStripped, @P + LEN(@Marker) + LEN(@ThisComment + 'x') + LEN('/**/') - 1, LEN(@SQLStripped)), CHAR(13)+CHAR(10), '', 0)
+       
 
         IF @Debug = 1 BEGIN
           PRINT '>>>>@SQLBeforeComment:' + @SQLBeforeComment
@@ -2899,8 +2928,8 @@ BEGIN
         END
 
         SET @SQLStripped = 
-              sqlver.udfRTRIMSuper(
-                @SQLBeforeComment +
+              CONCAT(
+                @SQLBeforeComment, @CRLF,
                 @SQLAfterComment
               )   
 
@@ -2957,15 +2986,6 @@ BEGIN
     was created.
     */
 
-    --Switch ALTER to CREATE for hash
-    --Find the first ALTER that is in uncommented SQL code
-    SET @P = sqlver.udfFindInSQL('ALTER', @SQLForHash, 0)
-    SET @P2 = sqlver.udfFindInSQL('CREATE', @SQLForHash, 0)
-
-    IF @P > 0 AND (NULLIF(@P2, 0) IS NULL OR @P2 > @P) BEGIN
-      SET @SQLForHash = sqlver.udfRTRIMSuper(sqlver.udfLTRIMSuper(LEFT(@SQLForHash, @P - 1) + 'CREATE' + RIGHT(@SQLForHash, LEN(@SQLForHash) - LEN('ALTER'))))
-    END
-
     SELECT
       @LastSchemaLogId = MAX(schl.SchemaLogId)
     FROM
@@ -2974,12 +2994,13 @@ BEGIN
       schl.SchemaName = @SchemaName AND
       schl.ObjectName = @ObjectName          
  
-  
     IF @ObjectType NOT IN ('TABLE', 'INDEX', 'TYPE') AND
-        (@ThisComment IS NOT NULL OR
-        @ThisManifestComment IS NOT NULL OR
-        NULLIF(RTRIM(@CopyrightMsg), '') IS NOT NULL OR
-        @ForceSchemaBinding IS NOT NULL) BEGIN
+        (
+         @ThisComment IS NOT NULL OR
+         @ThisManifestComment IS NOT NULL OR
+         NULLIF(RTRIM(@CopyrightMsg), '') IS NOT NULL OR
+         @ForceSchemaBinding IS NOT NULL
+        ) BEGIN
       SET @NeedExec = 1
     END
           
@@ -3130,7 +3151,7 @@ BEGIN
         SET @Msg = 'sqlver.spSysSchemaProcessObject: Updating sqlver.tblSchemaManifest (@ManifestID=' + ISNULL(CAST(@ManifestID AS varchar(100)), 'NULL') + ')'
         PRINT @Msg
       END
-        
+      
       UPDATE sqlver.tblSchemaManifest
       SET
         ObjectType = @ObjectType,
@@ -3139,7 +3160,7 @@ BEGIN
         IsEncrypted = @IsEncrypted,
         ForceSchemaBinding = NULL,
         ExecuteAs = @ExecuteAs,
-        Comments = @ThisManifestComment,
+        Comments = COALESCE(NULLIF(RTRIM(@ThisManifestComment), ''), Comments),
         IsGenerated = @IsGenerated
       WHERE
         SchemaManifestId = @ManifestId              
@@ -3219,12 +3240,22 @@ BEGIN
       SET @SQLForExec = @SQLStripped
 
       --Switch CREATE to ALTER to execute DDL
-      SET @P = sqlver.udfFindInSQL('CREATE', @SQLForExec, 0)
       SET @P2 = sqlver.udfFindInSQL('ALTER', @SQLForExec, 0)
-      IF @P > 0 AND (NULLIF(@P2, 0) IS NULL OR @P2 > @P) BEGIN
-        SET @SQLForExec= LEFT(@SQLForExec, @P - 1) + 'ALTER' + RIGHT(@SQLForExec, LEN(@SQLForExec) - LEN('CREATE'))
-      END
+      SET @P = sqlver.udfFindInSQL('CREATE', @SQLForExec, 0)
+      SET @P3 = sqlver.udfFindInSQL('CREATE OR ALTER', @SQLForExec, 0)
 
+      IF @P3 > 0 BEGIN
+        IF @P3 = @P2 AND (NULLIF(@P, 0) IS NULL OR @P > @P3) BEGIN
+          SET @WasCreateOrAlter = 1
+          SET @P = @P3
+          SET @SQLForExec = STUFF(@SQLForExec, @P, LEN('CREATE OR ALTER'), 'ALTER')
+        END 
+      END
+      ELSE BEGIN
+        IF @P > 0 AND (NULLIF(@P2, 0) IS NULL OR @P2 > @P) BEGIN
+          SET @SQLForExec = STUFF(@SQLForExec, @P, LEN('CREATE'), 'ALTER')
+        END
+      END
       
       IF @ForceSchemaBinding = 1 AND @HasSchemabinding = 0 BEGIN
         SET @WithClause = ISNULL(NULLIF(RTRIM(@WithClause), '') + ', ', 'WITH ') + 'SCHEMABINDING'
@@ -3277,10 +3308,22 @@ BEGIN
         @CRLF + 'AS')      
 
       SET @SQLForExec = REPLACE(@SQLForExec, '{{!' + 'ParseMarker!}}', @SVMarker)
-
+     
+     /*
+      IF @SchemaName = 'sqlver' AND @ObjectName = 'spsysSchemaProcessObject' BEGIN
+        PRINT 'Note: SQLVer will not automatically manipulate comments in the special procedure sqlver.spsysSchemaProcessObject so you may need to manually modify this procedure to remove unwanted /ver comments and the like.' 
+      END
+      ELSE
+      */
       IF @EventType NOT IN ('create_synonym') AND
-         @EventType NOT LIKE 'drop%' AND
-         @ObjectName <> 'spsysSchemaProcessObject' BEGIN
+         @EventType NOT LIKE 'drop%'
+         --AND NOT (@SchemaName = 'sqlver' AND @ObjectName = 'spsysSchemaProcessObject')
+      BEGIN
+        --Note: This error will be reported in the special case when we are processing
+        --this procedure sqlver.spsysSchemaProcessObject:
+        --  The definition of object 'spsysSchemaProcessObject' has changed since it was compiled
+        --But this does not actually hurt anything. It is better to run the EXEC and let the caller
+        --ignore the error
 
         IF OBJECT_ID('tempdb..#SQLVerWork') IS NULL BEGIN
           CREATE TABLE #SQLVerWork (
@@ -3442,6 +3485,80 @@ BEGIN
     SET @Msg = 'sqlver.spSysSchemaProcessObject: Finished'
     PRINT @Msg
   END    
+
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spsysReprocessObjects]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spsysReprocessObjects]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spsysReprocessObjects]
+@TargetStr nvarchar(MAX)
+
+WITH EXECUTE AS CALLER
+--$!SQLVer Jul 13 2021  8:06AM by sa
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  SET NOCOUNT ON
+
+  DECLARE @tvFind TABLE (
+    SchemaName sysname,
+    ObjectName sysname,
+    Context nvarchar(MAX)
+  )
+  INSERT INTO @tvFind
+  EXEC sqlver.spUtilFindInCode @TargetStr
+
+  DECLARE @SQL nvarchar(MAX)
+  DECLARE @ThisSchemaName sysname
+  DECLARE @ThisObjectName sysname
+  DECLARE @P int
+  DECLARE @P2 int
+
+  DECLARE curThis CURSOR LOCAL STATIC FOR
+  SELECT
+    fnd.SchemaName,
+    fnd.ObjectName
+  FROM
+    @tvFind fnd
+
+  OPEN curThis
+  FETCH curThis INTO @ThisSchemaName, @ThisObjectName
+
+  WHILE @@FETCH_STATUS = 0 BEGIN
+    PRINT 'sqlver.spsysReprocessObjects: ' + @ThisSchemaName + '.' + @ThisObjectName
+
+    EXEC sqlver.spsysSchemaProcessObject @SchemaName = @ThisSchemaName, @ObjectName = @ThisObjectName
+    
+    /*
+    --SET @SQL = OBJECT_DEFINITION(OBJECT_ID(@ThisObject))
+
+    --Switch ALTER to CREATE for hash
+    --Find the first ALTER that is in uncommented SQL code
+
+    SET @P = sqlver.udfFindInSQL('CREATE', @SQL, 0)
+    SET @P2 = sqlver.udfFindInSQL('ALTER', @SQL, 0)
+
+    IF @P > 0 AND (NULLIF(@P2, 0) IS NULL OR @P2 > @P) BEGIN
+      SET @SQL = STUFF(@SQL, @P, LEN('CREATE'), 'ALTER')
+    END
+
+    EXEC(@SQL)
+    */
+
+
+    FETCH curThis INTO @ThisSchemaName, @ThisObjectName
+  END
+
+  CLOSE curThis
+  DEALLOCATE curThis
 
 END
 
@@ -4774,9 +4891,9 @@ CREATE PROCEDURE [sqlver].[spsysGenerateSQLVer]
 @EssentialOnly bit = 0,
 @Buf nvarchar(MAX) = NULL OUTPUT,
 @ReturnResultset bit = 0
---$!SQLVer Mar 12 2025 10:11PM by sa
+--$!SQLVer Mar 15 2025  6:38AM by sa
 
---©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+--©Copyright 2006-2025 by David Rueter (drueter@assyst.com)
  --See:  https://github.com/davidrueter/sqlver)
 --Note: Comments after $!SQLVer and before AS are subject to automatic removal
 AS
@@ -4787,6 +4904,7 @@ BEGIN
 
   DECLARE @SQL nvarchar(MAX)
   DECLARE @IntroBanner nvarchar(MAX)
+  DECLARE @WelcomeBanner nvarchar(MAX)
   DECLARE @PostRunSQL nvarchar(MAX)
 
   DECLARE @LicenseBody nvarchar(MAX)
@@ -4820,7 +4938,7 @@ SOFTWARE.
 '
 
   SET @IntroBanner =
-    '--SQLVer' + CASE WHEN @EssentialOnly = 1 THEN 'Essential' ELSE '' END +
+    '--SQLVer' + CASE WHEN @EssentialOnly = 1 THEN 'Compact' ELSE '' END +
     ' generated on ' + CAST(GETDATE() AS varchar(100)) + NCHAR(13) + NCHAR(10) +
 
     @LicenseBody +
@@ -4829,7 +4947,23 @@ SOFTWARE.
     NCHAR(13) + NCHAR(10) 
 
 
+  SET @WelcomeBanner = CONCAT(
+'Run this script to install the ',
+CASE WHEN @EssentialOnly = 1 THEN 'compact' ELSE 'full' END,
+'SQLVer version management system into a sqlver schema in this database.
+
+',
+'This script is non-destructive, and is safe to run on production databases.
+
+Please send me an email at drueter@assyst.com if you fid this useful, or have
+suggestions or questions.
+
+')
+
   SET @PostRunSQL = NCHAR(13) + NCHAR(10) +  '
+
+PRINT ''Scanning all database objects to store initial version information.''
+EXEC sqlver.spsysSchemaProcessAll @SkipExec=1
 
 PRINT ''Done processing all database objects.  SQLVer is now ready for normal use.''
 PRINT ''''
@@ -4838,21 +4972,20 @@ PRINT ''''
 + CASE WHEN ISNULL(@EssentialOnly, 0) = 0 THEN
 '
 PRINT ''''
-PRINT ''If you like, you can now build one or more of these CLR assemblies:''
+PRINT ''If you like, you can now build and deploy one or more of these CLR assemblies:''
 PRINT ''''
 PRINT ''
 /*
-EXEC sqlver.spsysBuildCLR_DiffMatch
-EXEC sqlver.spsysBuildCLR_GetHTTP
-EXEC sqlver.spsysBuildCLR_SendMail
-EXEC sqlver.spsysBuildCLR_FTP
-EXEC sqlver.spsysBuildCLR_SQLVerUtil
+EXEC sqlver.spsysBuildCLR_GetHTTP    --Provides ability to call external REST APIs or post or fetch data
+EXEC sqlver.spsysBuildCLR_SendMail   --Provides ability to send emails
+EXEC sqlver.spsysBuildCLR_FTP        --Provides ability to upload data via FTP
+EXEC sqlver.spsysBuildCLR_DiffMatch  --Provides ability to show differences between two blocks of text
+EXEC sqlver.spsysBuildCLR_SQLVerUtil --Various: ping or test TCP connection to a host, read MP3 metadata
 */
 ''
 '
 
  ELSE '' END
-
 
 
 
@@ -4867,6 +5000,7 @@ EXEC sqlver.spsysBuildCLR_SQLVerUtil
   )
   VALUES
     ('req', 10),
+    ('[sqlver].[udfScriptTable]', 11), --need early, for deploy
     ('[sqlver].[tblNumbers]', 20),
     ('popnum', 30),
     ('[sqlver].[sputilPrintString]', 40),
@@ -4876,7 +5010,7 @@ EXEC sqlver.spsysBuildCLR_SQLVerUtil
     ('[sqlver].[udfIsInComment]', 100),
     ('[sqlver].[udfLTRIMSuper]', 110),
     ('[sqlver].[udfRTRIMSuper]', 120),
-    ('[sqlver].[udfScriptTable]', 130),
+    --('[sqlver].[udfScriptTable]', 130),
     ('[sqlver].[udfScriptType]', 135),
     ('[sqlver].[udfSQLTerm]', 140),
     ('[sqlver].[udfStripSQLComments]', 150),
@@ -4890,6 +5024,7 @@ EXEC sqlver.spsysBuildCLR_SQLVerUtil
     ('[sqlver].[spsysSchemaExistSync]', 180),
     ('[sqlver].[spusrSchemaObjectCategorize]', 190),
     ('[sqlver].[spsysSchemaProcessObject]', 200),
+    ('[sqlver].[spsysReprocessObjects]', 205),
     ('[sqlver].[spsysSchemaProcessAll]', 210),
     ('[sqlver].[spsysSchemaObjectCompare]', 220),
     ('[sqlver].[spsysSchemaObjectDefinition]', 230),
@@ -4899,7 +5034,20 @@ EXEC sqlver.spsysBuildCLR_SQLVerUtil
     ('[sqlver].[spsysSchemaVersionUpdateFromMaster]', 270),
     ('[sqlver].[spUninstall]', 280),
     ('[sqlver].[spsysGenerateSQLVer]', 290),
-    ('[dtgSQLVerLogSchemaChanges]', 300)
+    ('[dtgSQLVerLogSchemaChanges]', 300),
+    ('[sqlver].[sputilFindInCode]', 310),
+    ('[sqlver].[spgetLastModified]', 320),
+    ('[sqlver].[spgetSQLProgress]', 330),
+    ('[sqlver].[spShowRTLoggetSQLProgress]', 340),
+    ('[sqlver].[spVersion]', 350),
+    ('[sqlver].[spgetWhatChanged]', 360),
+    ('[dbo].[find]', 370),
+    ('[dbo].[lastMod]', 370),
+    ('[dbo].[rt]', 370),
+    ('[dbo].[rtlog]', 370),
+    ('[dbo].[ver]', 370),
+    ('[dbo].[verupd', 370),
+    ('[dbo].[wc]', 370)
 
 
   IF OBJECT_ID('tempdb..#scripts') IS NOT NULL BEGIN
@@ -4913,7 +5061,8 @@ EXEC sqlver.spsysBuildCLR_SQLVerUtil
     ObjectType sysname NULL,
     Seq int,
     IsEssential bit,
-    EsSeq int
+    EsSeq int,
+    DefHash varchar(300) NULL DEFAULT ''
   )
 
   
@@ -4993,8 +5142,10 @@ EXEC sqlver.spsysBuildCLR_SQLVerUtil
   ' JOIN master..spt_values b ON 1 = 1' + NCHAR(13) + NCHAR(10) +
   'END' + NCHAR(13) + NCHAR(10) +
   'ELSE BEGIN' + NCHAR(13) + NCHAR(10) +
+  'IF ISNULL((SELECT COUNT(*) FROM sqlver.tblNumbers), 0) <> 200000 BEGIN' + NCHAR(13) + NCHAR(10) +
   'PRINT ''WARNING: SQLVer requires that table sqlver.tblNumbers contain unique sequential integers from 1 to 200000.  Fewer rows may cause unexpected results.  More rows may be OK, but may degrade performance of certain functions.''' +
   NCHAR(13) + NCHAR(10) +
+  'END' + NCHAR(13) + NCHAR(10) +
   'END' + NCHAR(13) + NCHAR(10)
   )
 
@@ -5002,7 +5153,8 @@ EXEC sqlver.spsysBuildCLR_SQLVerUtil
   INSERT INTO #scripts (
     FQObjName,
     ObjectType,
-    Def
+    Def,
+    DefHash
   )
   SELECT
     QUOTENAME(sch.name) + '.' + QUOTENAME(obj.name),
@@ -5016,7 +5168,12 @@ EXEC sqlver.spsysBuildCLR_SQLVerUtil
       ELSE sqlver.udfRTRIMSuper(sqlver.udfLTRIMSuper(sm.definition))
     END AS nvarchar(MAX)) +
 
-    NCHAR(13) + NCHAR(10)
+    NCHAR(13) + NCHAR(10),
+
+    CASE obj.type
+      WHEN 'U' THEN CONVERT(varchar(MAX), sqlver.udfHashBytesNMax(DEFAULT, sqlver.udfScriptTable(sch.name, obj.name)), 1)
+      ELSE ''
+    END
   FROM
     sys.schemas sch
     JOIN sys.objects obj ON
@@ -5048,6 +5205,7 @@ EXEC sqlver.spsysBuildCLR_SQLVerUtil
       'UQ'  --UNIQUE_CONSTRAINT
       )
   ORDER BY
+    CASE WHEN obj.name = 'udfScriptTable' THEN 1 ELSE 2 END, --need early, for deploy
     CASE obj.type
       WHEN 'U' THEN 1   --USER_TABLE
       WHEN 'V' THEN 2   --VIEW
@@ -5136,20 +5294,26 @@ EXEC sqlver.spsysBuildCLR_SQLVerUtil
       CASE scr.ObjectType WHEN ''U'' THEN ''END
 
       ELSE BEGIN
-      PRINT ''''WARNING:  Table '' + scr.FQObjName + '' already exists.''''
-      PRINT ''''It would be best if you can drop this table and then re-execute this script to re-create it.''''
-      PRINT ''''   DROP TABLE '' + scr.FQObjName + ''''''
-      PRINT ''''If you do not drop this table, you may need to alter it manually.''''
-      PRINT ''''New:''''
-      PRINT ''''>>>>''''
-      PRINT '''''' + scr.Def + ''''''
-      PRINT ''''<<<<''''
-      PRINT ''''''''
-      PRINT ''''Existing: ''''
-      PRINT ''''>>>>''''
-      PRINT '' + ''sqlver.udfScriptTable('' + CHAR(39) + scr.FQObjName + CHAR(39) + '', NULL)'' + ''
-      PRINT ''''<<<<''''
-      PRINT ''''''''
+      IF CONVERT(varchar(MAX), 
+       sqlver.udfHashBytesNMax(DEFAULT,
+        sqlver.udfScriptTable('''''' + scr.FQObjName + '''''', DEFAULT)
+       )
+       , 1) <> '''''' + scr.DefHash + '''''' BEGIN
+        PRINT ''''WARNING:  Table '' + scr.FQObjName + '' already exists.''''
+        PRINT ''''It would be best if you can drop this table and then re-execute this script to re-create it.''''
+        PRINT ''''   DROP TABLE '' + scr.FQObjName + ''''''
+        PRINT ''''If you do not drop this table, you may need to alter it manually.''''
+        PRINT ''''New:''''
+        PRINT ''''>>>>''''
+        PRINT '''''' + scr.Def + ''''''
+        PRINT ''''<<<<''''
+        PRINT ''''''''
+        PRINT ''''Existing: ''''
+        PRINT ''''>>>>''''
+        PRINT '' + ''sqlver.udfScriptTable('' + CHAR(39) + scr.FQObjName + CHAR(39) + '', NULL)'' + ''
+        PRINT ''''<<<<''''
+        PRINT ''''''''
+      END
       END'' + NCHAR(13) + NCHAR(10)' + 
       'ELSE '''' END +
 
@@ -5162,7 +5326,11 @@ EXEC sqlver.spsysBuildCLR_SQLVerUtil
     '
     ORDER BY
       scr.Seq'
-
+/*
+PRINT '***************************************'
+EXEC sqlver.sputilPrintString @SQL
+PRINT '***************************************'
+*/
 
   EXEC sqlver.sputilResultSetAsStr
     @SQL = @SQL,
@@ -5250,7 +5418,7 @@ FOR
   create_trigger, alter_trigger, drop_trigger,
   create_synonym, drop_synonym,
   create_type, drop_type
---$!SQLVer Nov 13 2024 10:12AM by sa
+--$!SQLVer Mar 15 2025  8:27AM by sa
 
 --Note: Comments after $!SQLVer and before AS are subject to automatic removal
 AS
@@ -5266,43 +5434,441 @@ BEGIN
     EXEC sqlver.spsysSchemaProcessObject @EventData = @EventData
   END TRY
   BEGIN CATCH
-    SET @Msg = CONCAT('Warning: SQLVer encountered an error: ', ERROR_MESSAGE())
+    DECLARE @SchemaName sysname = @EventData.value('(/EVENT_INSTANCE/SchemaName)[1]', 'sysname')
+    DECLARE @ObjectType sysname = @EventData.value('(/EVENT_INSTANCE/ObjectType)[1]', 'varchar(25)')
+    DECLARE @ObjectName sysname = 
+      CASE
+        WHEN @ObjectType = 'INDEX' THEN @EventData.value('(/EVENT_INSTANCE/TargetObjectName)[1]', 'sysname')
+        ELSE @EventData.value('(/EVENT_INSTANCE/ObjectName)[1]', 'sysname')
+      END
+    
+    SET @Msg = ERROR_MESSAGE()
 
-    IF (SELECT sysdb.user_access_desc FROM sys.databases sysdb WHERE sysdb.name = DB_NAME()) = 'SINGLE_USER' BEGIN
-      SET @Msg = CONCAT(
-        @Msg,
-        ' This may be due to the fact that the database is currently in SINGLE_USER mode.',
-        ' If the problem persists you could try temporarily disabling the SQLVer Database Trigger',
-        ' with: ', CHAR(13) + CHAR(10), 'DISABLE TRIGGER [dtgSQLVerLogSchemaChanges] ON DATABASE', CHAR(13) + CHAR(10),
-        ' (but be sure to re-enable with ENABLE TRIGGER [dtgSQLVerLogSchemaChanges] ON DATABASE when done.)'
-        )
+    IF @SchemaName = 'sqlver' AND 
+      @ObjectName = 'spsysSchemaProcessObject' AND
+      @Msg = 'The definition of object ''spsysSchemaProcessObject'' has changed since it was compiled.' BEGIN
+      --suppress this error, as it is expected and not a problem
+      SET @Msg = NULL
     END
+    ELSE BEGIN
+      SET @Msg = CONCAT('Warning: SQLVer encountered this: ', ERROR_MESSAGE())
 
-    PRINT @Msg
+      IF (SELECT sysdb.user_access_desc FROM sys.databases sysdb WHERE sysdb.name = DB_NAME()) = 'SINGLE_USER' BEGIN
+        SET @Msg = CONCAT(
+          @Msg,
+          ' This may be due to the fact that the database is currently in SINGLE_USER mode.',
+          ' If the problem persists you could try temporarily disabling the SQLVer Database Trigger',
+          ' with: ', CHAR(13) + CHAR(10), 'DISABLE TRIGGER [dtgSQLVerLogSchemaChanges] ON DATABASE', CHAR(13) + CHAR(10),
+          ' (but be sure to re-enable with ENABLE TRIGGER [dtgSQLVerLogSchemaChanges] ON DATABASE when done.)'
+          )
+      END
+
+      PRINT @Msg
+
+    END
   END CATCH
 END
+GO
+
+
+IF OBJECT_ID('[sqlver].[sputilFindInCode]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[sputilFindInCode]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[sputilFindInCode]
+@TargString nvarchar(254),
+@SchTarg sysname = NULL,
+@ObjTarg sysname = NULL,
+@TargString2 nvarchar(254) = NULL
+--$!SQLVer Nov  7 2020  5:09AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  SET NOCOUNT ON
+  
+  DECLARE @Msg varchar(MAX)
+  
+  DECLARE @PreLen int
+  SET @PreLen = 40
+  
+  DECLARE @PostLen int
+  SET @PostLen = 40
+  
+  SELECT DISTINCT
+    sch.name AS SchemaName,
+    so.name AS ObjectName, 
+    SUBSTRING(sysmod.definition, 
+      CASE WHEN PATINDEX('%' + @TargString + '%', sysmod.definition) - @PreLen < 1 
+        THEN 1 
+        ELSE PATINDEX('%' + @TargString + '%', sysmod.definition) - @PreLen
+      END,
+       
+      CASE WHEN PATINDEX('%' + @TargString + '%', sysmod.definition) + LEN(@TargString + 'x') - 1 + @PreLen + @PostLen > LEN(sysmod.definition + 'x') - 1
+        THEN LEN(sysmod.definition + 'x') - 1 - PATINDEX('%' + @TargString + '%', sysmod.definition) + 1
+        ELSE LEN(@TargString + 'x') - 1 + @PreLen + @PostLen
+      END) AS Context
+  INTO #Results
+  FROM
+    sys.objects so
+    JOIN sys.schemas sch ON so.schema_id = sch.schema_id
+    JOIN sys.sql_modules  sysmod ON so.object_id = sysmod.object_id
+  WHERE 
+    ((@SchTarg IS NULL) OR (sch.name = @SchTarg)) AND
+    ((@ObjTarg IS NULL) OR (PATINDEX('%' + @ObjTarg + '%', so.name) > 0)) AND
+    (PATINDEX('%' + @TargString + '%', sysmod.definition) > 0) AND
+    ((@TargString2 IS NULL) OR (PATINDEX('%' + @TargString2 + '%', sysmod.definition) > 0))
+    
+  BEGIN TRY 
+  INSERT INTO #Results (
+    SchemaName,
+    ObjectName,
+    Context
+  )
+  SELECT DISTINCT
+    CAST('**SQL Agent Job***' AS sysname)  collate database_default AS SchemaName,
+    CAST(sysj.name + ' | Step: ' +  sysjs.step_name + ' (' + CAST(sysjs.step_id AS varchar(100)) + ')' AS sysname) collate database_default AS ObjectName,
+    
+    SUBSTRING(sysjs.command, 
+      CASE WHEN PATINDEX('%' + @TargString + '%', sysjs.command) - @PreLen < 1 
+        THEN 1 
+        ELSE PATINDEX('%' + @TargString + '%', sysjs.command) - @PreLen
+      END,
+       
+      CASE WHEN PATINDEX('%' + @TargString + '%', sysjs.command) + LEN(@TargString + 'x') - 1 + @PreLen + @PostLen > LEN(sysjs.command + 'x') - 1
+        THEN LEN(sysjs.command + 'x') - 1 - PATINDEX('%' + @TargString + '%', sysjs.command) + 1
+        ELSE LEN(@TargString + 'x') - 1 + @PreLen + @PostLen
+      END) collate database_default AS Context     
+  FROM
+    msdb.dbo.sysjobs sysj
+    JOIN msdb.dbo.sysjobsteps sysjs ON
+      sysj.job_id = sysjs.job_id      
+  WHERE 
+    (PATINDEX('%' + @TargString + '%', sysjs.command) > 0)
+  END TRY
+  BEGIN CATCH
+    SET @Msg='sqlver.sputilFindInCode could not search SQL Agent jobs: ' + ERROR_MESSAGE() 
+  END CATCH
+        
+  SELECT
+    SchemaName,
+    ObjectName,
+    Context
+  FROM
+    #Results
+  ORDER BY
+    SchemaName,
+    ObjectName
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spgetLastModified]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spgetLastModified]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spgetLastModified]
+--$!SQLVer Oct  3 2023  8:32AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  --NOTE:  intentionally returns the EARLIEST date for a given hash.
+  --In other words:  if an object was changed, and that change was reverted, the
+  --date would remain the original date (prior to the change and the reversion)
+
+  SELECT
+    x.SchemaName,
+    x.ObjectName,
+    x.ObjectType,
+    x.CurrentHash,
+    x.EventDate AS DateLastModified
+  FROM 
+    (
+    SELECT
+      om.SchemaName,
+      om.ObjectName,
+      om.ObjectType,
+      om.CurrentHash,
+      schl.EventDate,
+      ROW_NUMBER() OVER (PARTITION BY om.SchemaName, om.ObjectName ORDER BY schl.SchemaLogID) AS Seq
+    FROM
+      sqlver.tblSchemaManifest om
+      JOIN sqlver.tblSchemaLog schl ON
+        om.SchemaName = schl.SchemaName AND
+        om.ObjectName = schl.ObjectName AND
+        om.CurrentHash = schl.Hash
+    ) x
+  WHERE
+    x.Seq = 1
+  ORDER BY
+    x.EventDate DESC
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spgetSQLProgress]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spgetSQLProgress]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spgetSQLProgress]
+@FilterForCommand sysname = NULL
+--$!SQLVer Dec 18 2020 12:54AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  SELECT
+    er.session_id, er.command, er.percent_complete
+  FROM
+    sys.dm_exec_requests er
+  WHERE
+    (@FilterForCommand IS NULL AND NULLIF(er.percent_complete, 0) IS NOT NULL) OR
+    (er.command LIKE @FilterForCommand + '%')
+    --er.command like 'DBCC%'
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spVersion]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spVersion]
+END
+GO
+
+CREATE PROCEDURE [sqlver].[spVersion]
+@ObjectName nvarchar(512) = NULL,
+@MaxVersions int = NULL,
+@ChangedSince datetime = NULL,
+@SchemaLogId int = NULL,
+@SortByName bit = 0
+--$!SQLVer Nov  7 2020  5:09AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  SET NOCOUNT ON
+  
+  DECLARE @TargetDBName sysname
+  DECLARE @TargetSchemaName sysname
+  DECLARE @TargetObjectName sysname
+  
+  SET @TargetDBName = ISNULL(PARSENAME(@ObjectName, 3), DB_NAME())
+  SET @TargetSchemaName = ISNULL(PARSENAME(@ObjectName, 2), '%')
+  SET @TargetObjectName = ISNULL(PARSENAME(@ObjectName, 1), '%')
+
+  SELECT
+    x.Object,
+    x.LastUpdate,
+    x.LastUpdateBy,
+    x.Comments,
+    x.SQLCommand,
+    x.DateAppeared,
+    x.SchemaLogId,
+    x.Hash
+  FROM (
+    SELECT
+      COALESCE(
+        l.DatabaseName + '.' + l.SchemaName + '.' + l.ObjectName,
+        m.DatabaseName + '.' + m.SchemaName + '.' + m.ObjectName) AS Object,
+      m.DateAppeared,
+      l.SchemaLogId,
+      COALESCE(l.EventDate, m.DateUpdated) AS LastUpdate,
+      COALESCE(l.LoginName, m.CreatedByLoginName) AS LastUpdateBy,
+      COALESCE(l.Comments, m.Comments) AS Comments,
+      COALESCE(l.Hash, m.CurrentHash) AS Hash,
+      COALESCE(l.SQLCommand, m.OrigDefinition) AS SQLCommand,
+      CASE 
+        WHEN l.SchemaLogID IS NULL THEN 0 
+        ELSE ROW_NUMBER() OVER (PARTITION BY l.DatabaseName, l.SchemaName, l.ObjectName ORDER BY l.SchemaLogId DESC)
+      END AS Seq
+    FROM
+      sqlver.tblSchemaLog l
+      FULL OUTER JOIN sqlver.tblSchemaManifest m ON
+        l.SchemaName = m.SchemaName AND
+        l.ObjectName = m.ObjectName
+    WHERE
+      COALESCE(l.DatabaseName, m.DatabaseName) LIKE @TargetDBName AND
+      COALESCE(l.SchemaName, m.SchemaName) LIKE @TargetSchemaName AND
+      COALESCE(l.ObjectName, m.ObjectName) LIKE @TargetObjectName AND
+      
+      (@ChangedSince IS NULL OR COALESCE(l.EventDate, m.DateUpdated) >= @ChangedSince) AND
+      (@SchemaLogId IS NULL OR l.SchemaLogId = @SchemaLogId)
+    ) x
+  WHERE
+    (
+     (@MaxVersions IS NULL AND x.Seq < 2) OR
+     (x.Seq < = @MaxVersions)
+    )
+  ORDER BY
+    CASE 
+      WHEN @SortByName = 1 THEN x.Object
+    END,
+    CASE    
+      WHEN @ChangedSince IS NOT NULL OR 
+        (
+        @ObjectName IS NULL AND
+        @MaxVersions IS NULL AND
+        @ChangedSince IS NULL AND
+        @SchemaLogId IS NULL
+        )
+        THEN x.LastUpdate
+    END DESC,
+    CASE 
+      WHEN @SortByName = 0 THEN x.Object
+    END
+    
+    
+    
+  IF @SchemaLogId IS NOT NULL BEGIN
+    DECLARE @Buf nvarchar(MAX)
+    SELECT @Buf = l.SQLCommand
+    FROM
+      sqlver.tblSchemaLog l
+    WHERE
+      l.SchemaLogID = @SchemaLogID
+      
+   EXEC sqlver.sputilPrintString @Buf
+          
+  END
+END
+
+GO
+
+
+IF OBJECT_ID('[sqlver].[spgetWhatChanged]') IS NOT NULL BEGIN
+  DROP PROCEDURE [sqlver].[spgetWhatChanged]
+END
+GO
+
+CREATE PROCEDURE sqlver.spgetWhatChanged
+@On datetime = NULL,
+@DayPad int = NULL,
+@StartDate datetime = NULL,
+@EndDate datetime = NULL
+--$!SQLVer Nov  7 2020  5:10AM by sa
+
+--©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
+ --See:  https://github.com/davidrueter/sqlver)
+--Note: Comments after $!SQLVer and before AS are subject to automatic removal
+AS
+BEGIN
+  IF @On IS NOT NULL BEGIN
+    SET @StartDate = CAST(@On AS date)
+    SET @EndDate = @StartDate + 1
+  END
+
+  IF @DayPad IS NOT NULL BEGIN
+    SET @StartDate = DATEADD(day, @DayPad * -1, @StartDate)
+    SET @EndDate = DATEADD(day, @DayPad, @EndDate)
+  END
+
+  SELECT *
+  FROM
+  (
+    SELECT
+      sm.SchemaName,
+      sm.ObjectName,
+      Min(schl.EventDate) AS FirstMod,
+      MAX(schl.EventDate) AS LastMod
+    FROM
+      sqlver.tblSchemaLog schl
+      JOIN sqlver.tblSchemaManifest sm ON
+        schl.SchemaName = sm.SchemaName AND
+        schl.ObjectName = sm.ObjectName
+    WHERE
+      sm.IsGenerated = 0 AND
+      (@StartDate IS NULL OR schl.EventDate > @StartDate) AND
+      (@EndDate IS NULL OR schl.EventDate < @EndDate + 1) 
+    GROUP BY
+      sm.SchemaName,
+      sm.ObjectName
+  ) x
+  ORDER BY
+    x.LastMod DESC
+END
+
+GO
+
+
+IF OBJECT_ID('[dbo].[rtlog]') IS NOT NULL BEGIN
+  DROP SYNONYM [dbo].[rtlog]
+END
+GO
+
+CREATE SYNONYM [dbo].[rtlog] FOR [sqlver].[spinsSysRTLog]
+
+GO
+
+
+IF OBJECT_ID('[dbo].[rt]') IS NOT NULL BEGIN
+  DROP SYNONYM [dbo].[rt]
+END
+GO
+
+CREATE SYNONYM [dbo].[rt] FOR [sqlver].[spShowRTLog]
+
+GO
+
+
+IF OBJECT_ID('[dbo].[wc]') IS NOT NULL BEGIN
+  DROP SYNONYM [dbo].[wc]
+END
+GO
+
+CREATE SYNONYM [dbo].[wc] FOR [sqlver].[spgetWhatChanged]
+
+GO
+
+
+IF OBJECT_ID('[dbo].[find]') IS NOT NULL BEGIN
+  DROP SYNONYM [dbo].[find]
+END
+GO
+
+CREATE SYNONYM [dbo].[find] FOR [sqlver].[sputilFindInCode]
+
+GO
+
+
+IF OBJECT_ID('[dbo].[lastMod]') IS NOT NULL BEGIN
+  DROP SYNONYM [dbo].[lastMod]
+END
+GO
+
+CREATE SYNONYM [dbo].[lastMod] FOR [sqlver].[spgetLastModified]
+
+GO
+
+
+IF OBJECT_ID('[dbo].[ver]') IS NOT NULL BEGIN
+  DROP SYNONYM [dbo].[ver]
+END
+GO
+
+CREATE SYNONYM [dbo].[ver] FOR [sqlver].[spVersion]
+
 GO
 
 
 
 
 
+PRINT 'Scanning all database objects to store initial version information.'
+EXEC sqlver.spsysSchemaProcessAll @SkipExec=1
+
 PRINT 'Done processing all database objects.  SQLVer is now ready for normal use.'
 PRINT ''
-/*
-WARNING:  You must search-and-replace the string printed here to replace:
-    ~-~{CR}{LF}
-with an empty string.
-
-For example, using T-SQL:
-
-    REPLACE(@Buf, CHAR(126) + CHAR(45) + CHAR(126) + CHAR(13) + CHAR(10), '')
-
-Or using SSMS, open Find and Replace (i.e. with CTRL-H), click the .* icon (to enable regular expressions), and search for:
-
-    \x7e\x2d\x7e\x0d\x0a
-
-
-
-(This is due to a limitation of the T-SQL PRINT statement that does not provide a way to print long strings or to suppress CR LF.)
-*/
