@@ -1,4 +1,4 @@
---SQLVerCompact generated on Mar 15 2025  9:42AM
+--SQLVerCompact generated on Mar 15 2025 10:08AM
 
 /*
 SQLVer
@@ -554,15 +554,15 @@ GO
 
 IF NOT EXISTS(SELECT TOP 1 Number FROM sqlver.tblNumbers) BEGIN
 INSERT INTO sqlver.tblNumbers (Number)
-SELECT TOP 200000
+SELECT TOP 300000
 ROW_NUMBER() OVER (ORDER BY a.number, b.number)
 FROM
   master..spt_values a
  JOIN master..spt_values b ON 1 = 1
 END
 ELSE BEGIN
-IF ISNULL((SELECT COUNT(*) FROM sqlver.tblNumbers), 0) <> 200000 BEGIN
-PRINT 'WARNING: SQLVer requires that table sqlver.tblNumbers contain unique sequential integers from 1 to 200000.  Fewer rows may cause unexpected results.  More rows may be OK, but may degrade performance of certain functions.'
+IF ISNULL((SELECT COUNT(*) FROM sqlver.tblNumbers), 0) <> 300000 BEGIN
+PRINT 'WARNING: SQLVer requires that table sqlver.tblNumbers contain unique sequential integers from 1 to 300000.  Fewer rows may cause unexpected results.  More rows may be OK, but may degrade performance of certain functions.'
 END
 END
 
@@ -3491,80 +3491,6 @@ END
 GO
 
 
-IF OBJECT_ID('[sqlver].[spsysReprocessObjects]') IS NOT NULL BEGIN
-  DROP PROCEDURE [sqlver].[spsysReprocessObjects]
-END
-GO
-
-CREATE PROCEDURE [sqlver].[spsysReprocessObjects]
-@TargetStr nvarchar(MAX)
-
-WITH EXECUTE AS CALLER
---$!SQLVer Jul 13 2021  8:06AM by sa
---©Copyright 2006-2018 by David Rueter (drueter@assyst.com)
- --See:  https://github.com/davidrueter/sqlver)
---Note: Comments after $!SQLVer and before AS are subject to automatic removal
-AS
-BEGIN
-  SET NOCOUNT ON
-
-  DECLARE @tvFind TABLE (
-    SchemaName sysname,
-    ObjectName sysname,
-    Context nvarchar(MAX)
-  )
-  INSERT INTO @tvFind
-  EXEC sqlver.spUtilFindInCode @TargetStr
-
-  DECLARE @SQL nvarchar(MAX)
-  DECLARE @ThisSchemaName sysname
-  DECLARE @ThisObjectName sysname
-  DECLARE @P int
-  DECLARE @P2 int
-
-  DECLARE curThis CURSOR LOCAL STATIC FOR
-  SELECT
-    fnd.SchemaName,
-    fnd.ObjectName
-  FROM
-    @tvFind fnd
-
-  OPEN curThis
-  FETCH curThis INTO @ThisSchemaName, @ThisObjectName
-
-  WHILE @@FETCH_STATUS = 0 BEGIN
-    PRINT 'sqlver.spsysReprocessObjects: ' + @ThisSchemaName + '.' + @ThisObjectName
-
-    EXEC sqlver.spsysSchemaProcessObject @SchemaName = @ThisSchemaName, @ObjectName = @ThisObjectName
-    
-    /*
-    --SET @SQL = OBJECT_DEFINITION(OBJECT_ID(@ThisObject))
-
-    --Switch ALTER to CREATE for hash
-    --Find the first ALTER that is in uncommented SQL code
-
-    SET @P = sqlver.udfFindInSQL('CREATE', @SQL, 0)
-    SET @P2 = sqlver.udfFindInSQL('ALTER', @SQL, 0)
-
-    IF @P > 0 AND (NULLIF(@P2, 0) IS NULL OR @P2 > @P) BEGIN
-      SET @SQL = STUFF(@SQL, @P, LEN('CREATE'), 'ALTER')
-    END
-
-    EXEC(@SQL)
-    */
-
-
-    FETCH curThis INTO @ThisSchemaName, @ThisObjectName
-  END
-
-  CLOSE curThis
-  DEALLOCATE curThis
-
-END
-
-GO
-
-
 IF OBJECT_ID('[sqlver].[spsysSchemaProcessAll]') IS NOT NULL BEGIN
   DROP PROCEDURE [sqlver].[spsysSchemaProcessAll]
 END
@@ -4891,7 +4817,7 @@ CREATE PROCEDURE [sqlver].[spsysGenerateSQLVer]
 @EssentialOnly bit = 0,
 @Buf nvarchar(MAX) = NULL OUTPUT,
 @ReturnResultset bit = 0
---$!SQLVer Mar 15 2025  6:38AM by sa
+--$!SQLVer Mar 15 2025 10:05AM by sa
 
 --©Copyright 2006-2025 by David Rueter (drueter@assyst.com)
  --See:  https://github.com/davidrueter/sqlver)
@@ -5024,7 +4950,6 @@ EXEC sqlver.spsysBuildCLR_SQLVerUtil --Various: ping or test TCP connection to a
     ('[sqlver].[spsysSchemaExistSync]', 180),
     ('[sqlver].[spusrSchemaObjectCategorize]', 190),
     ('[sqlver].[spsysSchemaProcessObject]', 200),
-    ('[sqlver].[spsysReprocessObjects]', 205),
     ('[sqlver].[spsysSchemaProcessAll]', 210),
     ('[sqlver].[spsysSchemaObjectCompare]', 220),
     ('[sqlver].[spsysSchemaObjectDefinition]', 230),
@@ -5135,15 +5060,15 @@ EXEC sqlver.spsysBuildCLR_SQLVerUtil --Various: ping or test TCP connection to a
   VALUES ('popnum', 
   'IF NOT EXISTS(SELECT TOP 1 Number FROM sqlver.tblNumbers) BEGIN' + NCHAR(13) + NCHAR(10) +
   'INSERT INTO sqlver.tblNumbers (Number)' + NCHAR(13) + NCHAR(10) +
-  'SELECT TOP 200000' + NCHAR(13) + NCHAR(10) +
+  'SELECT TOP 300000' + NCHAR(13) + NCHAR(10) +
   'ROW_NUMBER() OVER (ORDER BY a.number, b.number)' + NCHAR(13) + NCHAR(10) +
   'FROM' + NCHAR(13) + NCHAR(10) +
   '  master..spt_values a' + NCHAR(13) + NCHAR(10) +
   ' JOIN master..spt_values b ON 1 = 1' + NCHAR(13) + NCHAR(10) +
   'END' + NCHAR(13) + NCHAR(10) +
   'ELSE BEGIN' + NCHAR(13) + NCHAR(10) +
-  'IF ISNULL((SELECT COUNT(*) FROM sqlver.tblNumbers), 0) <> 200000 BEGIN' + NCHAR(13) + NCHAR(10) +
-  'PRINT ''WARNING: SQLVer requires that table sqlver.tblNumbers contain unique sequential integers from 1 to 200000.  Fewer rows may cause unexpected results.  More rows may be OK, but may degrade performance of certain functions.''' +
+  'IF ISNULL((SELECT COUNT(*) FROM sqlver.tblNumbers), 0) <> 300000 BEGIN' + NCHAR(13) + NCHAR(10) +
+  'PRINT ''WARNING: SQLVer requires that table sqlver.tblNumbers contain unique sequential integers from 1 to 300000.  Fewer rows may cause unexpected results.  More rows may be OK, but may degrade performance of certain functions.''' +
   NCHAR(13) + NCHAR(10) +
   'END' + NCHAR(13) + NCHAR(10) +
   'END' + NCHAR(13) + NCHAR(10)
